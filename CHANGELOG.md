@@ -2,6 +2,9 @@
 
 Add a new section at the top for every update, then copy it into the GitHub Release notes.
 
+## 1.1.1
+- Fixed: the app sometimes closed right after tapping a reminder notification, or Android showed an "app has a bug" message. Splash, notification posting, alarm scheduling and the tap handler can no longer crash the app, and the activity now reuses the open instance (singleTop).
+
 ## 1.1
 - Light and dark theme (Settings → Appearance: System, Light or Dark). Dark stays the default.
 - Tapping a reminder opens it as a full page inside the app instead of a small pop-up.

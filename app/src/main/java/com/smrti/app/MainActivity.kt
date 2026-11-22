@@ -89,23 +89,27 @@ class MainActivity : ComponentActivity() {
 
     private fun handleNotificationIntent(intent: Intent?) {
         intent ?: return
-        val fromHistory = intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0
-        val text = intent.getStringExtra(Notifier.EXTRA_TEXT)
-        if (!fromHistory && !text.isNullOrBlank()) {
-            // opens as a full page inside the app, not a pop-up
-            Nav.open(
-                Page.Reminder(
-                    OpenedReminder(
-                        text = text,
-                        author = intent.getStringExtra(Notifier.EXTRA_AUTHOR).orEmpty(),
-                        category = intent.getStringExtra(Notifier.EXTRA_CATEGORY).orEmpty(),
-                        imagePath = intent.getStringExtra(Notifier.EXTRA_IMAGE_PATH)
+        try {
+            val fromHistory = intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0
+            val text = intent.getStringExtra(Notifier.EXTRA_TEXT)
+            if (!fromHistory && !text.isNullOrBlank()) {
+                // opens as a full page inside the app, not a pop-up
+                Nav.open(
+                    Page.Reminder(
+                        OpenedReminder(
+                            text = text,
+                            author = intent.getStringExtra(Notifier.EXTRA_AUTHOR).orEmpty(),
+                            category = intent.getStringExtra(Notifier.EXTRA_CATEGORY).orEmpty(),
+                            imagePath = intent.getStringExtra(Notifier.EXTRA_IMAGE_PATH)
+                        )
                     )
                 )
-            )
+            }
+            // consume, so rotating or re-opening doesn't show it again
+            intent.removeExtra(Notifier.EXTRA_TEXT)
+        } catch (_: Throwable) {
+            // a bad tap intent must never take the app down; just open normally
         }
-        // consume, so rotating or re-opening doesn't show it again
-        intent.removeExtra(Notifier.EXTRA_TEXT)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -121,25 +125,43 @@ class MainActivity : ComponentActivity() {
         Handler(Looper.getMainLooper()).postDelayed({ holdSplash = false }, 650)
         splash.setKeepOnScreenCondition { holdSplash }
         splash.setOnExitAnimationListener { provider ->
-            val icon = provider.iconView
-            val root = provider.view
-            icon.animate()
-                .scaleX(1.15f).scaleY(1.15f)
-                .setDuration(180)
-                .setInterpolator(DecelerateInterpolator())
-                .withEndAction {
-                    icon.animate()
-                        .scaleX(0.4f).scaleY(0.4f).alpha(0f)
-                        .setDuration(320)
-                        .setInterpolator(AccelerateInterpolator())
-                        .start()
-                    root.animate()
-                        .alpha(0f)
-                        .setDuration(320)
-                        .withEndAction { provider.remove() }
-                        .start()
+            // Never let the splash animation crash the app (it can fail when launched from a notification)
+            var removed = false
+            val safeRemove = {
+                if (!removed) {
+                    removed = true
+                    try { provider.remove() } catch (_: Throwable) { }
                 }
-                .start()
+            }
+            try {
+                val icon = provider.iconView
+                val root = provider.view
+                icon.animate()
+                    .scaleX(1.15f).scaleY(1.15f)
+                    .setDuration(180)
+                    .setInterpolator(DecelerateInterpolator())
+                    .withEndAction {
+                        try {
+                            icon.animate()
+                                .scaleX(0.4f).scaleY(0.4f).alpha(0f)
+                                .setDuration(320)
+                                .setInterpolator(AccelerateInterpolator())
+                                .start()
+                            root.animate()
+                                .alpha(0f)
+                                .setDuration(320)
+                                .withEndAction { safeRemove() }
+                                .start()
+                        } catch (_: Throwable) {
+                            safeRemove()
+                        }
+                    }
+                    .start()
+                // safety net: the splash is always removed, even if an animation is cancelled
+                Handler(Looper.getMainLooper()).postDelayed({ safeRemove() }, 1500)
+            } catch (_: Throwable) {
+                safeRemove()
+            }
         }
         super.onCreate(savedInstanceState)
         ThemeState.mode = Prefs.themeMode(this)

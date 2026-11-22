@@ -61,9 +61,24 @@ object Notifier {
         if (!canNotify(context)) return false
         val db = AppDatabase.get(context)
         val quote = db.quotes().next(Prefs.disabledCategories(context).toList()) ?: return false
-        val pick = if (Prefs.useImages(context)) ImagePool.next(context) else null
-        val picture = pick?.bitmap
+        val pick = if (Prefs.useImages(context)) try { ImagePool.next(context) } catch (_: Throwable) { null } else null
 
+        // First try with the picture; if Android rejects it (bitmap too big etc.), post it without.
+        try {
+            post(context, quote, pick, withPicture = true)
+        } catch (_: Throwable) {
+            try {
+                post(context, quote, pick, withPicture = false)
+            } catch (_: Throwable) {
+                return false
+            }
+        }
+        db.quotes().markShown(quote.id, System.currentTimeMillis())
+        return true
+    }
+
+    private fun post(context: Context, quote: com.smrti.app.data.Quote, pick: ImagePool.Pick?, withPicture: Boolean) {
+        val picture = if (withPicture) pick?.bitmap else null
         val body = if (quote.author.isNotBlank()) "${quote.text}\n— ${quote.author}" else quote.text
         val title = "Smrti · ${quote.category}"
 
@@ -76,7 +91,7 @@ object Notifier {
             .putExtra(EXTRA_CATEGORY, quote.category)
             .putExtra(EXTRA_IMAGE_PATH, pick?.source)
         val tap = PendingIntent.getActivity(
-            context, quote.id.toInt(), tapIntent,
+            context, (quote.id % Int.MAX_VALUE).toInt(), tapIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         // Fallback icon (used if the banner is off): square thumbnail of the picture, else the Smrti logo.
@@ -127,16 +142,15 @@ object Notifier {
         }
 
         NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
-        db.quotes().markShown(quote.id, System.currentTimeMillis())
-        return true
     }
+
 
     /** Center-crops (biased slightly upward) to a wide banner. */
     private fun banner(source: Bitmap, width: Int, height: Int): Bitmap {
         val target = width.toFloat() / height
         val aspect = source.width.toFloat() / source.height
-        val cropW = if (aspect > target) (source.height * target).toInt() else source.width
-        val cropH = if (aspect > target) source.height else (source.width / target).toInt()
+        val cropW = (if (aspect > target) (source.height * target).toInt() else source.width).coerceIn(1, source.width)
+        val cropH = (if (aspect > target) source.height else (source.width / target).toInt()).coerceIn(1, source.height)
         val x = (source.width - cropW) / 2
         val y = ((source.height - cropH) * 0.4f).toInt()
         return Bitmap.createScaledBitmap(Bitmap.createBitmap(source, x, y, cropW, cropH), width, height, true)

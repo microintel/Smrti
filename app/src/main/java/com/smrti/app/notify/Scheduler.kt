@@ -34,9 +34,14 @@ object Scheduler {
         if (isQuiet(context, at)) at = quietEndAfter(context, at)
         Prefs.setNextAt(context, at)
         val pi = pendingIntent(context)
-        if (canScheduleExact(context)) {
-            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
-        } else {
+        try {
+            if (canScheduleExact(context)) {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+            } else {
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+            }
+        } catch (_: SecurityException) {
+            // exact-alarm permission was revoked a moment ago: fall back to an inexact alarm
             am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
         }
     }
@@ -88,7 +93,11 @@ class ReminderReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 if (Prefs.isEnabled(app)) {
-                    if (!Scheduler.isQuiet(app, System.currentTimeMillis())) Notifier.sendNext(app)
+                    try {
+                        if (!Scheduler.isQuiet(app, System.currentTimeMillis())) Notifier.sendNext(app)
+                    } catch (_: Throwable) {
+                        // a failed notification must not crash the app; the next one is still scheduled
+                    }
                     Scheduler.scheduleNext(app)
                 }
             } finally {
@@ -101,6 +110,8 @@ class ReminderReceiver : BroadcastReceiver() {
 /** Restores the alarm after reboot, app update, or a change in exact-alarm permission. */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (Prefs.isEnabled(context)) Scheduler.scheduleNext(context)
+        try {
+            if (Prefs.isEnabled(context)) Scheduler.scheduleNext(context)
+        } catch (_: Throwable) { }
     }
 }
