@@ -21,13 +21,16 @@ import com.smrti.app.R
 import com.smrti.app.data.AppDatabase
 import com.smrti.app.data.ImagePool
 import com.smrti.app.data.Prefs
+import com.smrti.app.widget.SmrtiWidget
 
 object Notifier {
     // v2: Android never lets an app raise an existing channel's importance, so the pop-up
     // (heads-up) channel needs a new id. The old low-importance one is removed.
-    private const val CHANNEL_ID = "smrti_reminders_v2"
+    private const val CHANNEL_ID = "smrti_reminders_v3"
     private const val OLD_CHANNEL_ID = "smrti_reminders"
-    private const val NOTIFICATION_ID = 1001
+    // v2 used the system default sound; a channel's sound can't be changed after it exists, so it is replaced
+    private const val OLD_CHANNEL_ID_V2 = "smrti_reminders_v2"
+    const val NOTIFICATION_ID = 1001
 
     // Extras carried by the tap intent so the app can show the exact reminder that was tapped.
     const val EXTRA_QUOTE_ID = "smrti.quote_id"
@@ -36,17 +39,35 @@ object Notifier {
     const val EXTRA_CATEGORY = "smrti.category"
     const val EXTRA_IMAGE_PATH = "smrti.image_path"
 
+    const val ACTION_SAVE = "com.smrti.app.action.SAVE"
+
     fun createChannel(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
         nm.deleteNotificationChannel(OLD_CHANNEL_ID)
+        nm.deleteNotificationChannel(OLD_CHANNEL_ID_V2)
         val channel = NotificationChannel(
             CHANNEL_ID, "Smrti reminders", NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = "Hourly quotes, motivation and dialogues"
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC // readable on the lock screen
             setShowBadge(true)
+            // Smrti's own sound instead of the phone's default notification sound
+            setSound(
+                android.net.Uri.parse("android.resource://${context.packageName}/${R.raw.smrti_notification}"),
+                android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+            )
         }
         nm.createNotificationChannel(channel)
+    }
+
+    /** True while the screen is off or the lock screen is showing. */
+    fun isDeviceLocked(context: Context): Boolean {
+        val keyguard = context.getSystemService(android.app.KeyguardManager::class.java)
+        val power = context.getSystemService(android.os.PowerManager::class.java)
+        return keyguard?.isKeyguardLocked == true || power?.isInteractive == false
     }
 
     fun canNotify(context: Context): Boolean {
@@ -61,7 +82,10 @@ object Notifier {
         if (!canNotify(context)) return false
         val db = AppDatabase.get(context)
         val quote = db.quotes().next(Prefs.disabledCategories(context).toList()) ?: return false
-        val pick = if (Prefs.useImages(context)) try { ImagePool.next(context) } catch (_: Throwable) { null } else null
+        // the picture chosen for this quote wins; without one (or if it is gone) a random picture is used
+        val pick = if (Prefs.useImages(context)) try {
+            quote.imagePath?.let { ImagePool.load(context, it) } ?: ImagePool.next(context)
+        } catch (_: Throwable) { null } else null
 
         // First try with the picture; if Android rejects it (bitmap too big etc.), post it without.
         try {
@@ -74,13 +98,15 @@ object Notifier {
             }
         }
         db.quotes().markShown(quote.id, System.currentTimeMillis())
+        Prefs.setLastQuoteId(context, quote.id)
+        try { SmrtiWidget.refresh(context) } catch (_: Throwable) { }
         return true
     }
 
     private fun post(context: Context, quote: com.smrti.app.data.Quote, pick: ImagePool.Pick?, withPicture: Boolean) {
         val picture = if (withPicture) pick?.bitmap else null
         val body = if (quote.author.isNotBlank()) "${quote.text}\n— ${quote.author}" else quote.text
-        val title = "Smrti · ${quote.category}"
+        val title = "Smrti"
 
         // Tapping opens the app and shows this exact reminder (quote + picture).
         val tapIntent = Intent(context, MainActivity::class.java)
@@ -98,9 +124,18 @@ object Notifier {
         val largeIcon = picture?.let { squareThumbnail(it, 256) }
             ?: BitmapFactory.decodeResource(context.resources, R.drawable.smrti_logo)
 
+        // Buttons under the notification: save as favourite
+        fun actionIntent(action: String) = PendingIntent.getBroadcast(
+            context, action.hashCode(),
+            Intent(context, NotificationActionReceiver::class.java).setAction(action)
+                .putExtra(EXTRA_QUOTE_ID, quote.id),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .addAction(R.drawable.ic_stat_smrti, context.getString(R.string.notif_save), actionIntent(ACTION_SAVE))
             .setSmallIcon(R.drawable.ic_stat_smrti)
-            .setColor(0xFFF5A94A.toInt())
+            .setColor(0xFFFAB62F.toInt())
             .setLargeIcon(largeIcon)
             .setContentTitle(title)
             .setContentText(body)
@@ -109,7 +144,7 @@ object Notifier {
             // pop up as a banner on the home screen / over other apps, and show on the lock screen
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setDefaults(NotificationCompat.DEFAULT_VIBRATE or NotificationCompat.DEFAULT_LIGHTS) // sound comes from the channel
             .setOnlyAlertOnce(false)
             .setWhen(System.currentTimeMillis())
             .setShowWhen(true)

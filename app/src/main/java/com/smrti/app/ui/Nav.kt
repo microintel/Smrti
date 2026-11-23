@@ -1,7 +1,11 @@
 package com.smrti.app.ui
 
+import com.smrti.app.R
+import androidx.compose.ui.res.stringResource
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -14,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -32,6 +37,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/** Widest the content gets on tablets and in landscape. */
+val ContentMaxWidth = 720.dp
+
 /** Full-screen pages that open inside the app (instead of pop-up dialogs). */
 sealed interface Page {
     data class Reminder(val reminder: OpenedReminder) : Page
@@ -39,6 +47,9 @@ sealed interface Page {
     data object ImportGuide : Page
     data object Albums : Page
     data object About : Page
+    data class EditQuote(val quote: com.smrti.app.data.Quote) : Page
+    data object Onboarding : Page
+    data object Reliability : Page
 }
 
 object Nav {
@@ -61,8 +72,8 @@ fun PageHost(modifier: Modifier = Modifier) {
 
     AnimatedVisibility(
         visible = current != null,
-        enter = slideInHorizontally { it / 3 } + fadeIn(),
-        exit = slideOutHorizontally { it / 3 } + fadeOut(),
+        enter = if (reduceMotion) EnterTransition.None else slideInHorizontally { it / 3 } + fadeIn(),
+        exit = if (reduceMotion) ExitTransition.None else slideOutHorizontally { it / 3 } + fadeOut(),
         modifier = modifier
     ) {
         Box(
@@ -72,13 +83,19 @@ fun PageHost(modifier: Modifier = Modifier) {
                 // swallow touches so nothing underneath reacts
                 .pointerInput(Unit) { detectTapGestures { } }
         ) {
-            when (val p = last) {
-                is Page.Reminder -> ReminderPage(p.reminder)
-                Page.AddQuote -> AddQuotePage()
-                Page.ImportGuide -> ImportGuidePage()
-                Page.Albums -> AlbumsPage()
-                Page.About -> AboutPage()
-                null -> {}
+            // on tablets and in landscape the page stays a readable width, centred
+            Box(Modifier.align(Alignment.TopCenter).widthIn(max = ContentMaxWidth).fillMaxSize()) {
+                when (val p = last) {
+                    is Page.Reminder -> ReminderPage(p.reminder)
+                    Page.AddQuote -> AddQuotePage()
+                    is Page.EditQuote -> AddQuotePage(editing = p.quote)
+                    Page.ImportGuide -> ImportGuidePage()
+                    Page.Albums -> AlbumsPage()
+                    Page.About -> AboutPage()
+                    Page.Onboarding -> OnboardingPage()
+                    Page.Reliability -> ReliabilityPage()
+                    null -> {}
+                }
             }
         }
     }
@@ -91,7 +108,7 @@ fun PageHeader(title: String, subtitle: String? = null, onBack: () -> Unit = { N
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
         }
         Column(Modifier.weight(1f).padding(start = 4.dp)) {
             Text(title, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)

@@ -16,6 +16,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
+import coil.imageLoader
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandHorizontally
@@ -74,9 +79,10 @@ import com.smrti.app.ui.OpenedReminder
 import com.smrti.app.ui.Page
 import com.smrti.app.ui.PageHost
 import com.smrti.app.ui.ThemeState
+import com.smrti.app.ui.reduceMotion
 import com.smrti.app.ui.isAppDark
 import com.smrti.app.data.Prefs
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.foundation.layout.consumeWindowInsets
 import com.smrti.app.ui.QuotesScreen
 import com.smrti.app.ui.SettingsScreen
@@ -93,6 +99,10 @@ class MainActivity : ComponentActivity() {
             val fromHistory = intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0
             val text = intent.getStringExtra(Notifier.EXTRA_TEXT)
             if (!fromHistory && !text.isNullOrBlank()) {
+                // start loading the picture now, so it is ready when the reminder page appears
+                intent.getStringExtra(Notifier.EXTRA_IMAGE_PATH)?.let { path ->
+                    try { imageLoader.enqueue(com.smrti.app.ui.reminderImageRequest(this, path)) } catch (_: Throwable) { }
+                }
                 // opens as a full page inside the app, not a pop-up
                 Nav.open(
                     Page.Reminder(
@@ -112,6 +122,38 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Whether the app is showing its dark theme right now (same rule as isAppDark, usable outside Compose). */
+    private fun resolveDark(): Boolean = when (ThemeState.mode) {
+        Prefs.THEME_LIGHT -> false
+        Prefs.THEME_DARK -> true
+        else -> (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+    }
+
+    private var barsDark = true
+
+    /**
+     * Status / navigation bar icons: dark icons on the light theme, light icons on the dark theme.
+     * Set straight on the window (and again on resume) so nothing can leave white icons on the cream background.
+     */
+    private fun applySystemBars(dark: Boolean) {
+        enableEdgeToEdge(
+            statusBarStyle = if (dark) SystemBarStyle.dark(Color.TRANSPARENT)
+            else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
+            navigationBarStyle = if (dark) SystemBarStyle.dark(Color.TRANSPARENT)
+            else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+        )
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = !dark
+            isAppearanceLightNavigationBars = !dark
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        applySystemBars(barsDark)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -120,10 +162,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
-        // keep the logo on screen a moment, then it pops and fades into the app
-        var holdSplash = true
-        Handler(Looper.getMainLooper()).postDelayed({ holdSplash = false }, 650)
-        splash.setKeepOnScreenCondition { holdSplash }
+        // No artificial wait: the splash leaves as soon as the first frame is ready, with a very short fade
+        // (and none at all when animations are reduced).
         splash.setOnExitAnimationListener { provider ->
             // Never let the splash animation crash the app (it can fail when launched from a notification)
             var removed = false
@@ -134,74 +174,56 @@ class MainActivity : ComponentActivity() {
                 }
             }
             try {
-                val icon = provider.iconView
-                val root = provider.view
-                icon.animate()
-                    .scaleX(1.15f).scaleY(1.15f)
-                    .setDuration(180)
-                    .setInterpolator(DecelerateInterpolator())
-                    .withEndAction {
-                        try {
-                            icon.animate()
-                                .scaleX(0.4f).scaleY(0.4f).alpha(0f)
-                                .setDuration(320)
-                                .setInterpolator(AccelerateInterpolator())
-                                .start()
-                            root.animate()
-                                .alpha(0f)
-                                .setDuration(320)
-                                .withEndAction { safeRemove() }
-                                .start()
-                        } catch (_: Throwable) {
-                            safeRemove()
-                        }
-                    }
-                    .start()
-                // safety net: the splash is always removed, even if an animation is cancelled
-                Handler(Looper.getMainLooper()).postDelayed({ safeRemove() }, 1500)
+                if (reduceMotion) {
+                    safeRemove()
+                } else {
+                    provider.view.animate().alpha(0f).setDuration(140)
+                        .withEndAction { safeRemove() }.start()
+                    // safety net: the splash is always removed, even if an animation is cancelled
+                    Handler(Looper.getMainLooper()).postDelayed({ safeRemove() }, 400)
+                }
             } catch (_: Throwable) {
                 safeRemove()
             }
         }
         super.onCreate(savedInstanceState)
         ThemeState.mode = Prefs.themeMode(this)
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT)
-        )
+        com.smrti.app.ui.CategoryIcons.custom = Prefs.customCategories(this).toMap()
+        barsDark = resolveDark()
+        applySystemBars(barsDark)
 
-        if (Build.VERSION.SDK_INT >= 33 &&
+        val firstRun = !Prefs.isOnboarded(this)
+        if (!firstRun && Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
             askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
 
-        if (savedInstanceState == null) handleNotificationIntent(intent)
+        if (savedInstanceState == null) {
+            handleNotificationIntent(intent)
+            // first run: explain the permissions before Android asks for them (not when opened from a reminder)
+            if (firstRun && Nav.page == null) Nav.open(Page.Onboarding)
+        }
 
         setContent {
             // status / navigation bar icons follow the chosen theme
             val dark = isAppDark()
-            DisposableEffect(dark) {
-                enableEdgeToEdge(
-                    statusBarStyle = if (dark) SystemBarStyle.dark(Color.TRANSPARENT)
-                    else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
-                    navigationBarStyle = if (dark) SystemBarStyle.dark(Color.TRANSPARENT)
-                    else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
-                )
-                onDispose { }
+            SideEffect {
+                barsDark = dark
+                applySystemBars(dark)
             }
             SmrtiTheme { SmrtiRoot() }
         }
     }
 }
 
-private data class Tab(val label: String, val icon: @Composable () -> Painter)
+private data class Tab(@androidx.annotation.StringRes val label: Int, val icon: @Composable () -> Painter)
 
 private val tabs = listOf(
-    Tab("Home") { rememberVectorPainter(Icons.Default.Home) },
-    Tab("Quotes") { painterResource(R.drawable.ic_tab_quote) },
-    Tab("Images") { painterResource(R.drawable.ic_tab_image) },
-    Tab("Settings") { rememberVectorPainter(Icons.Default.Settings) }
+    Tab(R.string.home) { rememberVectorPainter(Icons.Default.Home) },
+    Tab(R.string.quotes_title) { painterResource(R.drawable.ic_tab_quote) },
+    Tab(R.string.images) { painterResource(R.drawable.ic_tab_image) },
+    Tab(R.string.settings) { rememberVectorPainter(Icons.Default.Settings) }
 )
 
 private val NavHeight = 64.dp
@@ -223,15 +245,21 @@ private fun SmrtiRoot() {
             // swipe left / right to change tabs
             HorizontalPager(
                 state = pagerState,
-                beyondViewportPageCount = 1,
+                beyondViewportPageCount = 0,
                 modifier = Modifier.fillMaxSize()
             ) { page ->
-                Box(Modifier.fillMaxSize().padding(bottom = if (imeOpen) 0.dp else NavHeight + NavMargin * 2)) {
-                    when (page) {
-                        0 -> HomeScreen()
-                        1 -> QuotesScreen()
-                        2 -> ImagesScreen()
-                        else -> SettingsScreen()
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                    // on tablets and in landscape the content keeps a readable width instead of stretching edge to edge
+                    Box(
+                        Modifier.widthIn(max = com.smrti.app.ui.ContentMaxWidth).fillMaxSize()
+                            .padding(bottom = if (imeOpen) 0.dp else NavHeight + NavMargin * 2)
+                    ) {
+                        when (page) {
+                            0 -> HomeScreen()
+                            1 -> QuotesScreen()
+                            2 -> ImagesScreen()
+                            else -> SettingsScreen()
+                        }
                     }
                 }
             }
@@ -262,11 +290,10 @@ private fun FloatingNav(selected: Int, onSelect: (Int) -> Unit) {
     Row(
         Modifier
             .padding(bottom = NavMargin)
-            .shadow(12.dp, shape, clip = false)
             .clip(shape)
             .background(colors.surfaceContainerHigh)
             .border(1.dp, colors.outline, shape)
-            .height(NavHeight)
+            .heightIn(min = NavHeight)
             .padding(horizontal = 8.dp)
             .animateContentSize(),
         verticalAlignment = Alignment.CenterVertically,
@@ -277,7 +304,8 @@ private fun FloatingNav(selected: Int, onSelect: (Int) -> Unit) {
             val itemShape = RoundedCornerShape(24.dp)
             Row(
                 Modifier
-                    .height(48.dp)
+                    .heightIn(min = 48.dp)
+                    .semantics { this.selected = active }
                     .clip(itemShape)
                     .background(if (active) colors.secondaryContainer else androidx.compose.ui.graphics.Color.Transparent)
                     .clickable(
@@ -290,7 +318,7 @@ private fun FloatingNav(selected: Int, onSelect: (Int) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    tab.icon(), contentDescription = tab.label,
+                    tab.icon(), contentDescription = androidx.compose.ui.res.stringResource(tab.label),
                     tint = if (active) colors.primary else colors.onSurfaceVariant,
                     modifier = Modifier.size(24.dp)
                 )
@@ -300,7 +328,7 @@ private fun FloatingNav(selected: Int, onSelect: (Int) -> Unit) {
                     exit = shrinkHorizontally() + fadeOut()
                 ) {
                     Text(
-                        tab.label,
+                        androidx.compose.ui.res.stringResource(tab.label),
                         color = colors.primary,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,

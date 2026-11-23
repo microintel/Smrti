@@ -119,3 +119,25 @@ Quotes → Add quote opens a card with a live preview, category pills (💬 Quot
 - For best timing set Smrti's battery usage to Unrestricted.
 - Every reminder alerts (banner + sound), even at short intervals; each replaces the previous one in the shade. To silence a channel, use Settings → Notifications.
 - Lock screen content can be hidden by the phone's own "Sensitive notifications" / "Lock screen" setting; Smrti marks it public.
+
+
+## Release build and signing
+
+```
+# unsigned (R8 + baseline profile)
+gradle assembleRelease
+
+# signed: create keystore.properties next to build.gradle.kts (never commit it)
+storeFile=../smrti-release.jks
+storePassword=...
+keyAlias=...
+keyPassword=...
+gradle assembleRelease
+```
+CI can use the environment variables SMRTI_STORE_FILE, SMRTI_STORE_PASSWORD, SMRTI_KEY_ALIAS and SMRTI_KEY_PASSWORD instead.
+
+## Tests
+`gradle testDebugUnitTest` runs the importer, formatting and migration checks.
+
+## Changing the database
+Bump `version` in `Database.kt` and add a `Migration` to `ALL_MIGRATIONS`. Never edit an old one.

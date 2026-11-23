@@ -8,6 +8,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Spacer
@@ -30,6 +31,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -46,7 +48,7 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun ScreenTitle(title: String, subtitle: String? = null, modifier: Modifier = Modifier) {
     Column(modifier) {
-        Text(title, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
+        Text(title, fontSize = 28.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.5).sp)
         if (subtitle != null) {
             Text(
                 subtitle,
@@ -61,21 +63,25 @@ fun ScreenTitle(title: String, subtitle: String? = null, modifier: Modifier = Mo
 @Composable
 fun SectionLabel(text: String) {
     Text(
-        text,
-        style = MaterialTheme.typography.titleSmall,
+        text.uppercase(),
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.Medium,
+        letterSpacing = 1.2.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 4.dp, top = 28.dp, bottom = 8.dp)
     )
 }
 
-/** Rounded dark panel used for grouping content. */
+/** Flat rounded panel with a hairline edge, used for grouping content. */
 @Composable
 fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val shape = RoundedCornerShape(20.dp)
     Column(
         modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
+            .clip(shape)
             .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, shape)
             .padding(20.dp),
         content = content
     )
@@ -85,10 +91,10 @@ fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> 
 @Composable
 fun OptionTile(text: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(14.dp)
     Box(
         modifier
-            .height(52.dp)
+            .heightIn(min = 52.dp)
             .clip(shape)
             .background(if (selected) colors.primary else colors.surfaceVariant)
             .border(1.dp, if (selected) colors.primary else colors.outline, shape)
@@ -110,7 +116,7 @@ fun OptionTile(text: String, selected: Boolean, modifier: Modifier = Modifier, o
 fun Modifier.reveal(visible: Boolean): Modifier {
     val progress by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(650, easing = FastOutSlowInEasing),
+        animationSpec = if (reduceMotion) snap() else tween(650, easing = FastOutSlowInEasing),
         label = "reveal"
     )
     return this.graphicsLayer {
@@ -132,8 +138,9 @@ fun EmptyState(
 ) {
     val colors = MaterialTheme.colorScheme
     val bob = rememberInfiniteTransition(label = "bob")
+    val still = reduceMotion
     val lift by bob.animateFloat(
-        initialValue = 0f, targetValue = -10f,
+        initialValue = 0f, targetValue = if (still) 0f else -10f,
         animationSpec = infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "lift"
     )
@@ -162,7 +169,7 @@ fun EmptyState(
                 onClick = onAction,
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = colors.onPrimary),
-                modifier = Modifier.height(52.dp)
+                modifier = Modifier.heightIn(min = 52.dp)
             ) { Text(actionLabel, fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
         }
     }
@@ -175,8 +182,12 @@ fun ClosingMoment(emoji: String, title: String, subtitle: String? = null) {
     val scale = remember { Animatable(0.4f) }
     val fade = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        launch { fade.animateTo(1f, tween(250)) }
-        scale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
+        if (reduceMotion) {
+            fade.snapTo(1f); scale.snapTo(1f)
+        } else {
+            launch { fade.animateTo(1f, tween(250)) }
+            scale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
+        }
     }
     Box(Modifier.fillMaxSize().background(colors.background), contentAlignment = Alignment.Center) {
         Column(

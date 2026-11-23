@@ -52,6 +52,15 @@ object QuoteImporter {
         return out
     }
 
+    /** The whole collection as JSON the importer can read back (so it doubles as a backup). */
+    suspend fun exportJson(context: Context): String {
+        val array = JSONArray()
+        for (q in AppDatabase.get(context).quotes().all()) {
+            array.put(JSONObject().put("text", q.text).put("author", q.author).put("category", q.category))
+        }
+        return array.toString(2)
+    }
+
     /** Inserts parsed quotes, skipping duplicates. Returns how many were new. */
     suspend fun importJson(context: Context, json: String): Int {
         val quotes = parse(json)
@@ -85,6 +94,14 @@ object QuoteImporter {
             loadBundled(context)
             Prefs.setSeeded(context)
             Prefs.setDefaultsV2(context)
+            Prefs.setDefaultsV3(context)
+            return
+        }
+        if (!Prefs.isDefaultsV3(context)) {
+            // 1.2 ships a bigger starter set: add the ones this phone doesn't have yet (duplicates are skipped)
+            loadBundled(context)
+            Prefs.setSeeded(context)
+            Prefs.setDefaultsV3(context)
             return
         }
         if (Prefs.isSeeded(context)) return

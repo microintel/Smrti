@@ -1,5 +1,8 @@
 package com.smrti.app.ui
 
+import androidx.compose.foundation.layout.heightIn
+import com.smrti.app.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,7 +39,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -62,24 +64,24 @@ fun AlbumsPage() {
 
     Column(Modifier.fillMaxSize()) {
         PageHeader(
-            "Choose albums",
-            if (picked.isEmpty()) "Every photo in them feeds your reminders" else "${picked.size} selected"
+            stringResource(R.string.choose_albums),
+            if (picked.isEmpty()) stringResource(R.string.albums_subtitle_empty) else stringResource(R.string.n_selected, picked.size)
         )
 
         val list = albums
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
                 list == null -> Text(
-                    "Loading…", color = colors.onSurfaceVariant,
+                    stringResource(R.string.loading), color = colors.onSurfaceVariant,
                     modifier = Modifier.padding(20.dp)
                 )
                 list.isEmpty() -> EmptyState(
                     emoji = "📷",
-                    title = "No albums found",
-                    message = "Photos on your phone will show up here as albums."
+                    title = stringResource(R.string.no_albums_found),
+                    message = stringResource(R.string.photos_on_your_phone_will_show)
                 )
                 else -> LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
+                    columns = GridCells.Adaptive(160.dp),
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -95,15 +97,12 @@ fun AlbumsPage() {
                                 .border(if (on) 3.dp else 1.dp, if (on) colors.primary else colors.outline, shape)
                                 .clickable { picked = if (on) picked - album.id else picked + album.id }
                         ) {
-                            AsyncImage(
-                                model = album.cover, contentDescription = null,
-                                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()
-                            )
+                            Thumbnail(album.cover, Modifier.fillMaxSize(), sizePx = 400)
                             Box(
                                 Modifier
                                     .align(Alignment.BottomCenter)
                                     .fillMaxWidth()
-                                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC000000))))
+                                    .background(Color(0x99000000))
                                     .padding(start = 12.dp, end = 12.dp, top = 28.dp, bottom = 10.dp)
                             ) {
                                 Column {
@@ -111,7 +110,7 @@ fun AlbumsPage() {
                                         album.name, color = Color.White, fontSize = 15.sp,
                                         fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis
                                     )
-                                    Text("${album.count} photos", color = Color(0xCCFFFFFF), fontSize = 12.sp)
+                                    Text(stringResource(R.string.n_photos, album.count), color = Color(0xCCFFFFFF), fontSize = 12.sp)
                                 }
                             }
                             if (on) {
@@ -123,7 +122,7 @@ fun AlbumsPage() {
                                         .background(colors.primary, CircleShape),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(Icons.Default.Check, contentDescription = "Selected", tint = colors.onPrimary, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.Check, contentDescription = stringResource(R.string.selected), tint = colors.onPrimary, modifier = Modifier.size(18.dp))
                                 }
                             }
                         }
@@ -137,7 +136,7 @@ fun AlbumsPage() {
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = { Nav.close() }, modifier = Modifier.height(56.dp)) { Text("Cancel") }
+            TextButton(onClick = { Nav.close() }, modifier = Modifier.heightIn(min = 56.dp)) { Text(stringResource(R.string.cancel)) }
             Button(
                 onClick = {
                     Prefs.setAlbumIds(ctx, picked)
@@ -146,8 +145,8 @@ fun AlbumsPage() {
                 },
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = colors.onPrimary),
-                modifier = Modifier.weight(1f).height(56.dp)
-            ) { Text("Done", fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+                modifier = Modifier.weight(1f).heightIn(min = 56.dp)
+            ) { Text(stringResource(R.string.done), fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
         }
     }
 }

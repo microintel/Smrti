@@ -1,8 +1,26 @@
 package com.smrti.app.ui
 
 import android.net.Uri
+import android.widget.Toast
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import com.smrti.app.R
+import com.smrti.app.data.AppDatabase
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,12 +64,20 @@ data class OpenedReminder(
 @Composable
 fun ReminderPage(reminder: OpenedReminder) {
     val colors = MaterialTheme.colorScheme
+    val scope = rememberCoroutineScope()
     // the peak: picture, then the words, then the author arrive one after another
     var step by remember { mutableIntStateOf(0) }
     // the end: a warm closing beat before the page leaves
     var ending by remember { mutableStateOf(false) }
+    val ctx = LocalContext.current
+    // my images are files or content:// uris; wait (briefly) for the picture so it doesn't pop in late
+    val imagePath = reminder.imagePath?.takeIf { it.startsWith("content://") || File(it).exists() }
+    var imageReady by remember { mutableStateOf(imagePath == null) }
+    var imageFailed by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        delay(120); step = 1
+        delay(120)
+        withTimeoutOrNull(900) { snapshotFlow { imageReady }.first { it } }
+        step = 1
         delay(380); step = 2
         delay(380); step = 3
         delay(300); step = 4
@@ -62,7 +88,7 @@ fun ReminderPage(reminder: OpenedReminder) {
 
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
-        PageHeader(reminder.category.ifBlank { "Reminder" })
+        PageHeader(reminder.category.ifBlank { stringResource(R.string.reminder) })
 
         Column(
             Modifier
@@ -71,18 +97,18 @@ fun ReminderPage(reminder: OpenedReminder) {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
-            // my images are files in app storage, album images are content:// uris
-            val image: Any? = reminder.imagePath?.let {
-                if (it.startsWith("content://")) Uri.parse(it) else File(it).takeIf { f -> f.exists() }
-            }
-            if (image != null) {
+            if (imagePath != null && !imageFailed) {
                 AsyncImage(
-                    model = image,
+                    model = remember(imagePath) { reminderImageRequest(ctx, imagePath) },
                     contentDescription = null,
                     // show the whole picture, never cropped: full width, height follows the photo
                     contentScale = ContentScale.FillWidth,
+                    onSuccess = { imageReady = true },
+                    onError = { imageReady = true; imageFailed = true },
                     modifier = Modifier
                         .fillMaxWidth()
+                        // reserve room while it loads, so the words don't jump down
+                        .heightIn(min = if (imageReady) 0.dp else 240.dp)
                         .reveal(step >= 1)
                         .clip(RoundedCornerShape(28.dp))
                 )
@@ -103,6 +129,29 @@ fun ReminderPage(reminder: OpenedReminder) {
             Spacer(Modifier.height(16.dp))
         }
 
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp).reveal(step >= 4),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        val dao = AppDatabase.get(ctx).quotes()
+                        val match = dao.find(reminder.text, reminder.author)
+                        if (match != null) {
+                            dao.setFavorite(match.id, true)
+                            Toast.makeText(ctx, ctx.getString(R.string.notif_saved), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(painterResource(R.drawable.ic_star_outline), contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.notif_save))
+            }
+        }
+
         Button(
             onClick = { ending = true },
             shape = RoundedCornerShape(18.dp),
@@ -110,10 +159,10 @@ fun ReminderPage(reminder: OpenedReminder) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 12.dp)
-                .height(56.dp)
+                .heightIn(min = 56.dp)
                 .reveal(step >= 4)
-        ) { Text("Done", fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+        ) { Text(stringResource(R.string.done), fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
     }
-    if (ending) ClosingMoment("✨", "Carry it with you", "Until the next one")
+    if (ending) ClosingMoment("✨", stringResource(R.string.carry_it_with_you), stringResource(R.string.until_the_next_one))
     }
 }

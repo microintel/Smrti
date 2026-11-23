@@ -1,5 +1,8 @@
 package com.smrti.app.ui
 
+import androidx.compose.foundation.layout.heightIn
+import com.smrti.app.R
+import androidx.compose.ui.res.stringResource
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -80,9 +83,9 @@ fun ImportGuidePage() {
         scope.launch(Dispatchers.IO) {
             val msg = try {
                 val json = ctx.contentResolver.openInputStream(uri)!!.bufferedReader().use { it.readText() }
-                "Imported ${QuoteImporter.importJson(ctx, json)} new quotes"
+                ctx.getString(R.string.imported_n, QuoteImporter.importJson(ctx, json))
             } catch (e: Exception) {
-                "Couldn't read that file. Check it matches the structure in the import guide."
+                ctx.getString(R.string.couldnt_read_file)
             }
             withContext(Dispatchers.Main) {
                 Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
@@ -92,7 +95,7 @@ fun ImportGuidePage() {
     }
 
     Column(Modifier.fillMaxSize()) {
-        PageHeader("Import quotes", "Add many at once from a file")
+        PageHeader(stringResource(R.string.import_quotes), stringResource(R.string.add_many_at_once))
 
         Column(
             Modifier
@@ -101,19 +104,18 @@ fun ImportGuidePage() {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
         ) {
-            GuideTitle("What file")
+            GuideTitle(stringResource(R.string.what_file))
             Text(
-                "A plain text file ending in .json, saved on your phone (UTF-8, so emoji work). " +
-                    "Quotes you already have are skipped, so importing twice is safe.",
+                stringResource(R.string.guide_file_body),
                 style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant
             )
 
-            GuideTitle("How")
-            Step("1", "Create the file in the structure below. Any text editor works.")
-            Step("2", "Tap Choose file and pick it from Files, Downloads or Drive.")
-            Step("3", "Smrti tells you how many new quotes were added.")
+            GuideTitle(stringResource(R.string.how))
+            Step("1", stringResource(R.string.guide_step_1))
+            Step("2", stringResource(R.string.guide_step_2))
+            Step("3", stringResource(R.string.guide_step_3))
 
-            GuideTitle("Structure")
+            GuideTitle(stringResource(R.string.structure))
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -126,20 +128,18 @@ fun ImportGuidePage() {
             }
 
             Spacer(Modifier.height(12.dp))
-            FieldRow("text", "required", "The quote, motivation or dialogue line.")
-            FieldRow("author", "optional", "Person, character or movie. Shown under the quote.")
-            FieldRow("category", "optional", "Quote, Motivation or Dialogue. Leave out for Quote. Any other word creates a new category.")
+            FieldRow("text", true, stringResource(R.string.field_text_desc))
+            FieldRow("author", false, stringResource(R.string.field_author_desc))
+            FieldRow("category", false, stringResource(R.string.field_category_desc))
 
-            GuideTitle("Also accepted")
+            GuideTitle(stringResource(R.string.also_accepted))
             Text(
-                "Just a list of strings:  [\"one\", \"two\"]\n" +
-                    "A wrapper object:  { \"quotes\": [ … ] }\n" +
-                    "Other field names: quote, content, message, dialogue for text; by, name, speaker, character, source for author; type, tag for category.",
+                stringResource(R.string.guide_also_body),
                 style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, lineHeight = 19.sp
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Tip: ask any AI chat \"Write 50 motivational quotes in this JSON format\" and paste the example above.",
+                stringResource(R.string.tip_ask_any_ai_chat_write),
                 style = MaterialTheme.typography.bodySmall, color = colors.primary, lineHeight = 19.sp
             )
 
@@ -147,11 +147,11 @@ fun ImportGuidePage() {
             OutlinedButton(
                 onClick = {
                     clipboard.setText(AnnotatedString(exampleJson))
-                    Toast.makeText(ctx, "Example copied", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(ctx, ctx.getString(R.string.example_copied), Toast.LENGTH_SHORT).show()
                 },
                 shape = RoundedCornerShape(18.dp),
-                modifier = Modifier.fillMaxWidth().height(48.dp)
-            ) { Text("Copy example") }
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            ) { Text(stringResource(R.string.copy_example)) }
             Spacer(Modifier.height(12.dp))
         }
 
@@ -159,8 +159,8 @@ fun ImportGuidePage() {
             onClick = { picker.launch(arrayOf("*/*")) },
             shape = RoundedCornerShape(18.dp),
             colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = colors.onPrimary),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp).height(56.dp)
-        ) { Text("Choose file", fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp).heightIn(min = 56.dp)
+        ) { Text(stringResource(R.string.choose_file), fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
     }
 }
 
@@ -187,12 +187,12 @@ private fun Step(number: String, text: String) {
 }
 
 @Composable
-private fun FieldRow(name: String, tag: String, description: String) {
+private fun FieldRow(name: String, required: Boolean, description: String) {
     val colors = MaterialTheme.colorScheme
     Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.Top) {
         Column(Modifier.width(84.dp)) {
             Text(name, fontFamily = FontFamily.Monospace, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-            Text(tag, fontSize = 11.sp, color = if (tag == "required") colors.primary else colors.onSurfaceVariant)
+            Text(stringResource(if (required) R.string.required else R.string.optional), fontSize = 11.sp, color = if (required) colors.primary else colors.onSurfaceVariant)
         }
         Text(description, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, lineHeight = 19.sp)
     }

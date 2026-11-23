@@ -1,5 +1,6 @@
 package com.smrti.app.ui
 
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -27,12 +28,19 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.runtime.collectAsState
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.delay
@@ -48,6 +56,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -55,8 +64,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smrti.app.data.AppDatabase
 import com.smrti.app.data.Prefs
+import com.smrti.app.data.ImageStore
 import com.smrti.app.data.Quote
 import androidx.compose.material3.TextButton
+import android.widget.Toast
+import androidx.compose.ui.res.stringResource
+import com.smrti.app.R
 import androidx.compose.foundation.text.KeyboardOptions
 import kotlinx.coroutines.launch
 import java.text.BreakIterator
@@ -80,11 +93,16 @@ private fun extractEmojis(input: String): List<String> {
 
 private val categories = listOf("Quote", "Motivation", "Dialogue")
 
+/** Emoji of the categories the user created (loaded at start, updated when a new one is made). */
+object CategoryIcons {
+    var custom by mutableStateOf(mapOf<String, String>())
+}
+
 internal fun categoryEmoji(category: String) = when (category) {
     "Quote" -> "💬"
     "Motivation" -> "🔥"
     "Dialogue" -> "🎬"
-    else -> "✨"
+    else -> CategoryIcons.custom[category] ?: "✨"
 }
 
 // Quick-insert emoji, grouped. The phone keyboard's own emoji work in the field too.
@@ -96,25 +114,16 @@ private val emojiGroups = listOf(
     "🎬" to listOf("🎬", "🎭", "🎤", "🎧", "🎵", "📖", "✍️", "📝", "🕰️", "⏳", "🗝️", "🔔", "🧭", "🪞", "🕯️", "💭")
 )
 
-/** Add a quote, full page inside the app. */
+/** Popup with every emoji group plus the user's own emojis. Calls [onPick] for each tap; the caller decides whether to close. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun AddQuotePage() {
+private fun EmojiPopup(onPick: (String) -> Unit, onDismiss: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val ctx = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val dao = remember { AppDatabase.get(ctx).quotes() }
-
-    var field by remember { mutableStateOf(TextFieldValue("")) }
-    var author by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf(categories.first()) }
     var group by remember { mutableIntStateOf(0) }
     var mine by remember { mutableStateOf(Prefs.customEmojis(ctx)) }
     var newEmoji by remember { mutableStateOf("") }
-    var saved by remember { mutableStateOf(false) }
-    LaunchedEffect(saved) { if (saved) { delay(1000); Nav.close() } }
     val myTab = emojiGroups.size // the last tab is the user's own emojis
-    val text = field.text
 
     fun addMine() {
         val added = extractEmojis(newEmoji).filter { it !in mine }.distinct()
@@ -125,6 +134,205 @@ fun AddQuotePage() {
         newEmoji = ""
     }
 
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.done)) } },
+        text = {
+            Column {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    emojiGroups.forEachIndexed { i, (icon, _) ->
+                        Box(
+                            Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(if (i == group) colors.secondaryContainer else Color.Transparent)
+                                .clickable { group = i },
+                            contentAlignment = Alignment.Center
+                        ) { Text(icon, fontSize = 20.sp) }
+                    }
+                    Box(
+                        Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(if (group == myTab) colors.secondaryContainer else Color.Transparent)
+                            .clickable { group = myTab },
+                        contentAlignment = Alignment.Center
+                    ) { Text("➕", fontSize = 18.sp) }
+                }
+                Spacer(Modifier.height(8.dp))
+                Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
+                    if (group < myTab) {
+                        emojiGroups[group].second.chunked(5).forEach { rowItems ->
+                            Row {
+                                rowItems.forEach { e ->
+                                    Box(
+                                        Modifier.size(44.dp).clip(CircleShape).clickable { onPick(e) },
+                                        contentAlignment = Alignment.Center
+                                    ) { Text(e, fontSize = 24.sp) }
+                                }
+                            }
+                        }
+                    } else {
+                        // your own emojis: add from your keyboard, tap to use, hold to remove
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = newEmoji, onValueChange = { newEmoji = it },
+                                placeholder = { Text(stringResource(R.string.type_or_paste_emoji)) },
+                                singleLine = true, shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.weight(1f)
+                            )
+                            Button(
+                                enabled = extractEmojis(newEmoji).isNotEmpty(),
+                                onClick = { addMine() },
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.heightIn(min = 56.dp)
+                            ) { Text(stringResource(R.string.add)) }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        if (mine.isEmpty()) {
+                            Text(
+                                stringResource(R.string.open_your_keyboard_s_emoji_pick),
+                                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant
+                            )
+                        } else {
+                            mine.chunked(5).forEach { rowItems ->
+                                Row {
+                                    rowItems.forEach { e ->
+                                        Box(
+                                            Modifier
+                                                .size(44.dp)
+                                                .clip(CircleShape)
+                                                .combinedClickable(
+                                                    onClick = { onPick(e) },
+                                                    onLongClick = {
+                                                        mine = mine - e
+                                                        Prefs.setCustomEmojis(ctx, mine)
+                                                    }
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) { Text(e, fontSize = 24.sp) }
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(stringResource(R.string.tap_to_use_hold_to_remove), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
+
+/** Category chooser: shows only the selected category; tapping opens a drop-down list with a "New category" entry. */
+@Composable
+private fun CategoryDropdown(selected: String, options: List<String>, onSelect: (String) -> Unit, onNew: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    var open by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(14.dp)
+    Box(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+                .clip(shape)
+                .background(colors.surface)
+                .border(1.dp, colors.outline, shape)
+                .clickable { open = true }
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "${categoryEmoji(selected)}  $selected",
+                modifier = Modifier.weight(1f), maxLines = 1,
+                fontWeight = FontWeight.Medium, color = colors.onSurface
+            )
+            Text("▾", fontSize = 18.sp, color = colors.onSurfaceVariant)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            options.forEach { c ->
+                DropdownMenuItem(
+                    text = { Text("${categoryEmoji(c)}  $c") },
+                    onClick = { onSelect(c); open = false }
+                )
+            }
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text("➕  ${stringResource(R.string.new_category)}", color = colors.primary, fontWeight = FontWeight.Medium) },
+                onClick = { open = false; onNew() }
+            )
+        }
+    }
+}
+
+/** Create a category: a name and an emoji picked from the popup. */
+@Composable
+private fun NewCategoryDialog(onCreate: (name: String, emoji: String) -> Unit, onDismiss: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    var name by remember { mutableStateOf("") }
+    var emoji by remember { mutableStateOf("✨") }
+    var picking by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.new_category)) },
+        text = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(colors.surfaceVariant)
+                        .clickable { picking = true },
+                    contentAlignment = Alignment.Center
+                ) { Text(emoji, fontSize = 26.sp) }
+                OutlinedTextField(
+                    value = name, onValueChange = { name = it.take(24) },
+                    label = { Text(stringResource(R.string.category_name)) },
+                    singleLine = true, shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = name.isNotBlank(), onClick = { onCreate(name.trim(), emoji) }) {
+                Text(stringResource(R.string.create))
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
+    )
+    if (picking) EmojiPopup(onPick = { emoji = it; picking = false }, onDismiss = { picking = false })
+}
+
+/** Add a quote, full page inside the app. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun AddQuotePage(editing: Quote? = null) {
+    val colors = MaterialTheme.colorScheme
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val dao = remember { AppDatabase.get(ctx).quotes() }
+
+    var field by remember { mutableStateOf(TextFieldValue(editing?.text ?: "")) }
+    var author by remember { mutableStateOf(editing?.author ?: "") }
+    var category by remember { mutableStateOf(editing?.category ?: categories.first()) }
+    // choices: the built-in ones, the ones the user created, and any that came with imported quotes
+    val usedCategories by remember { dao.observeCategories() }.collectAsState(initial = emptyList())
+    var created by remember { mutableStateOf(Prefs.customCategories(ctx)) }
+    val options = (categories + created.map { it.first } + usedCategories + listOfNotNull(editing?.category)).distinct()
+    var showNewCategory by remember { mutableStateOf(false) }
+    var showEmojis by remember { mutableStateOf(false) }
+    var saved by remember { mutableStateOf(false) }
+    var imagePath by remember { mutableStateOf(editing?.imagePath) }
+    val pickPicture = androidx.activity.compose.rememberLauncherForActivityResult(remember { PickPersistableImage() }) { uri ->
+        if (uri != null) scope.launch { ImageStore.keep(ctx, uri)?.let { imagePath = it } }
+    }
+    LaunchedEffect(saved) { if (saved) { delay(1000); Nav.close() } }
+    val text = field.text
+
     fun insert(emoji: String) {
         val sel = field.selection
         val updated = field.text.replaceRange(sel.min, sel.max, emoji)
@@ -133,7 +341,10 @@ fun AddQuotePage() {
 
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().imePadding()) {
-        PageHeader("New entry", "Add to Smrti")
+        PageHeader(
+            stringResource(if (editing == null) R.string.new_entry else R.string.edit_quote),
+            stringResource(if (editing == null) R.string.add_to_smrti else R.string.change_it_here)
+        )
 
         Column(
             Modifier
@@ -142,196 +353,130 @@ fun AddQuotePage() {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
-            // Live preview, styled like the reminder card
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(colors.surfaceVariant)
-                    .height(IntrinsicSize.Min)
-            ) {
-                Box(Modifier.width(4.dp).fillMaxHeight().background(colors.primary))
-                Column(Modifier.padding(16.dp)) {
-                    Text(
-                        "${categoryEmoji(category)}  $category",
-                        style = MaterialTheme.typography.labelLarge, color = colors.primary
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text.ifBlank { "Your words appear here…" },
-                        fontFamily = FontFamily.Serif, fontSize = 19.sp, lineHeight = 28.sp,
-                        color = if (text.isBlank()) colors.onSurfaceVariant else colors.onSurface
-                    )
-                    if (author.isNotBlank()) {
-                        Spacer(Modifier.height(8.dp))
-                        Text("— ${author.trim()}", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(18.dp))
-
-            // Category
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                categories.forEach { c ->
-                    val on = category == c
-                    val pill = RoundedCornerShape(50)
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .height(42.dp)
-                            .clip(pill)
-                            .background(if (on) colors.primary else colors.surfaceVariant)
-                            .border(1.dp, if (on) colors.primary else colors.outline, pill)
-                            .clickable { category = c },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "${categoryEmoji(c)} $c", fontSize = 13.sp, maxLines = 1,
-                            fontWeight = FontWeight.Medium,
-                            color = if (on) colors.onPrimary else colors.onSurface
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // Text
-            OutlinedTextField(
-                value = field, onValueChange = { field = it },
-                label = { Text("Quote, motivation or dialogue") },
-                minLines = 3, shape = RoundedCornerShape(16.dp),
-                supportingText = { Text("${text.length} characters", color = colors.onSurfaceVariant) },
-                modifier = Modifier.fillMaxWidth()
+            // Category: shows only the chosen one, opens a list
+            CategoryDropdown(
+                selected = category, options = options,
+                onSelect = { category = it }, onNew = { showNewCategory = true }
             )
 
-            // Emoji strip
-            Spacer(Modifier.height(4.dp))
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Spacer(Modifier.height(14.dp))
+
+            // Writing surface: you type straight into a calm card, no box lines
+            val writeShape = RoundedCornerShape(20.dp)
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(writeShape)
+                    .background(colors.surface)
+                    .border(1.dp, colors.outline, writeShape)
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
             ) {
-                emojiGroups.forEachIndexed { i, (icon, _) ->
-                    Box(
-                        Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(if (i == group) colors.secondaryContainer else Color.Transparent)
-                            .clickable { group = i },
-                        contentAlignment = Alignment.Center
-                    ) { Text(icon, fontSize = 20.sp) }
-                }
-                Box(
-                    Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(if (group == myTab) colors.secondaryContainer else Color.Transparent)
-                        .clickable { group = myTab },
-                    contentAlignment = Alignment.Center
-                ) { Text("➕", fontSize = 18.sp) }
-            }
-            Spacer(Modifier.height(6.dp))
-            if (group < myTab) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(colors.surfaceVariant)
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    emojiGroups[group].second.forEach { e ->
-                        Box(
-                            Modifier.size(44.dp).clip(CircleShape).clickable { insert(e) },
-                            contentAlignment = Alignment.Center
-                        ) { Text(e, fontSize = 24.sp) }
-                    }
-                }
-            } else {
-                // your own emojis: add from your keyboard, tap to use, hold to remove
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(colors.surfaceVariant)
-                        .padding(12.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = newEmoji, onValueChange = { newEmoji = it },
-                            placeholder = { Text("Type or paste emoji") },
-                            singleLine = true, shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier.weight(1f)
-                        )
-                        Button(
-                            enabled = extractEmojis(newEmoji).isNotEmpty(),
-                            onClick = { addMine() },
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier.height(56.dp)
-                        ) { Text("Add") }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    if (mine.isEmpty()) {
+                TextField(
+                    value = field, onValueChange = { field = it },
+                    placeholder = {
                         Text(
-                            "Open your keyboard's emoji, pick any, then tap Add. They'll be saved here.",
-                            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant
+                            stringResource(R.string.quote_motivation_or_dialogue),
+                            fontFamily = FontFamily.Serif, fontSize = 20.sp, color = colors.onSurfaceVariant
                         )
-                    } else {
-                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                            mine.forEach { e ->
-                                Box(
-                                    Modifier
-                                        .size(44.dp)
-                                        .clip(CircleShape)
-                                        .combinedClickable(
-                                            onClick = { insert(e) },
-                                            onLongClick = {
-                                                mine = mine - e
-                                                Prefs.setCustomEmojis(ctx, mine)
-                                            }
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) { Text(e, fontSize = 24.sp) }
-                            }
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        Text("Tap to use · hold to remove", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                    }
+                    },
+                    textStyle = TextStyle(fontFamily = FontFamily.Serif, fontSize = 20.sp, lineHeight = 30.sp),
+                    minLines = 5,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 14.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { showEmojis = true }) { Text("😊  ${stringResource(R.string.add_emoji)}") }
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        stringResource(R.string.characters_count, text.length),
+                        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant
+                    )
                 }
             }
 
             Spacer(Modifier.height(14.dp))
 
-            // Author
-            OutlinedTextField(
-                value = author, onValueChange = { author = it },
-                label = { Text("Author / character / movie (optional)") },
-                leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = colors.onSurfaceVariant) },
-                singleLine = true, shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
+            // Picture for this quote (optional)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(colors.surface)
+                    .border(1.dp, colors.outline, RoundedCornerShape(20.dp))
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(Modifier.size(72.dp).clip(RoundedCornerShape(14.dp)).background(colors.surfaceVariant), contentAlignment = Alignment.Center) {
+                    imagePath?.let { Thumbnail(imageModel(it), Modifier.fillMaxSize(), sizePx = 240) } ?: Text("🖼️", fontSize = 28.sp)
+                }
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                    Text(stringResource(R.string.quote_picture_title), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(if (imagePath == null) R.string.quote_picture_hint_none else R.string.quote_picture_hint_set),
+                        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = { pickPicture.launch(arrayOf("image/*")) }) {
+                            Text(stringResource(if (imagePath == null) R.string.choose_picture else R.string.change_picture))
+                        }
+                        if (imagePath != null) TextButton(onClick = { imagePath = null }) { Text(stringResource(R.string.remove_picture)) }
+                    }
+                }
+            }
             Spacer(Modifier.height(12.dp))
         }
 
         Button(
             enabled = text.isNotBlank(),
             onClick = {
-                val quote = Quote(text = text.trim(), author = author.trim(), category = category, isCustom = true)
-                scope.launch { dao.insert(quote) }
-                saved = true
+                if (editing == null) {
+                    val quote = Quote(text = text.trim(), author = author.trim(), category = category, isCustom = true, imagePath = imagePath)
+                    scope.launch { dao.insert(quote) }
+                    saved = true
+                } else {
+                    scope.launch {
+                        try {
+                            dao.update(editing.copy(text = text.trim(), author = author.trim(), category = category, imagePath = imagePath))
+                            saved = true
+                        } catch (_: android.database.sqlite.SQLiteConstraintException) {
+                            // the same text and author already exist as another quote
+                            Toast.makeText(ctx, ctx.getString(R.string.quote_exists), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
             },
             shape = RoundedCornerShape(18.dp),
             colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = colors.onPrimary),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp).height(56.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp).heightIn(min = 56.dp)
         ) {
             Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Save", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.notif_save), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         }
     }
-    if (saved) ClosingMoment("🌟", "Saved", "Added to your collection")
+    if (showEmojis) EmojiPopup(onPick = { insert(it) }, onDismiss = { showEmojis = false })
+    if (showNewCategory) NewCategoryDialog(
+        onCreate = { name, emoji ->
+            val existing = options.firstOrNull { it.equals(name, ignoreCase = true) }
+            if (existing != null) {
+                category = existing
+            } else {
+                created = created + (name to emoji)
+                Prefs.setCustomCategories(ctx, created)
+                CategoryIcons.custom = created.toMap()
+                category = name
+            }
+            showNewCategory = false
+        },
+        onDismiss = { showNewCategory = false }
+    )
+    if (saved) ClosingMoment("🌟", stringResource(R.string.saved_title), stringResource(R.string.saved_subtitle))
     }
 }

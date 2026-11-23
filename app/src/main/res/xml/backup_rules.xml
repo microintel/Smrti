@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and older cloud backup -->
+<full-backup-content>
+    <!-- copies of photos are big and are rebuilt from the originals, so they stay out of the backup -->
+    <exclude domain="file" path="images/" />
+    <exclude domain="file" path="crash.log" />
+</full-backup-content>

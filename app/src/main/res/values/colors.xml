@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="smrti_bg">#000000</color>
-    <color name="ic_launcher_background">#0D1910</color>
+    <color name="smrti_bg">#041237</color>
+    <color name="smrti_yellow">#FAB62F</color>
+    <color name="ic_launcher_background">#FAB62F</color>
 </resources>

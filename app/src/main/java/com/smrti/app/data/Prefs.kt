@@ -59,6 +59,16 @@ object Prefs {
 
     // The user's own emojis for the add-quote picker (kept in the order they were added)
     private const val EMOJI_SEP = "\u001F"
+
+    // Categories the user created, each with its emoji: "name<US>emoji" entries joined by <RS>
+    private const val CATEGORY_SEP = "\u001E"
+    fun customCategories(c: Context): List<Pair<String, String>> =
+        (sp(c).getString("custom_categories", "") ?: "").split(CATEGORY_SEP).mapNotNull {
+            val p = it.split(EMOJI_SEP, limit = 2)
+            if (p.size == 2 && p[0].isNotBlank()) p[0] to p[1] else null
+        }
+    fun setCustomCategories(c: Context, v: List<Pair<String, String>>) =
+        sp(c).edit().putString("custom_categories", v.joinToString(CATEGORY_SEP) { "${it.first}$EMOJI_SEP${it.second}" }).apply()
     fun customEmojis(c: Context): List<String> =
         (sp(c).getString("custom_emojis", "") ?: "").split(EMOJI_SEP).filter { it.isNotBlank() }
     fun setCustomEmojis(c: Context, v: List<String>) =
@@ -66,6 +76,21 @@ object Prefs {
 
     fun isDefaultsV2(c: Context) = sp(c).getBoolean("defaults_v2", false)
     fun setDefaultsV2(c: Context) = sp(c).edit().putBoolean("defaults_v2", true).apply()
+
+    // Starter quotes grew in 1.2: phones that already seeded get the new ones added once (nothing is removed)
+    fun isDefaultsV3(c: Context) = sp(c).getBoolean("defaults_v3", false)
+    fun setDefaultsV3(c: Context) = sp(c).edit().putBoolean("defaults_v3", true).apply()
+
+    // First-run explanation of permissions. Phones that already used the app (quotes seeded) never see it.
+    fun initOnboarding(c: Context) {
+        if (!sp(c).contains("onboarded")) sp(c).edit().putBoolean("onboarded", isSeeded(c)).apply()
+    }
+    fun isOnboarded(c: Context) = sp(c).getBoolean("onboarded", true)
+    fun setOnboarded(c: Context) = sp(c).edit().putBoolean("onboarded", true).apply()
+
+    // The quote of the latest reminder, shown on the home screen widget
+    fun lastQuoteId(c: Context) = sp(c).getLong("last_quote_id", 0L)
+    fun setLastQuoteId(c: Context, v: Long) = sp(c).edit().putLong("last_quote_id", v).apply()
 
     fun isSeeded(c: Context) = sp(c).getBoolean("seeded", false)
     fun setSeeded(c: Context) = sp(c).edit().putBoolean("seeded", true).apply()
@@ -79,3 +104,10 @@ fun formatInterval(minutes: Int): String = when {
 
 fun formatClock(minutesAfterMidnight: Int): String =
     "%02d:%02d".format(minutesAfterMidnight / 60, minutesAfterMidnight % 60)
+
+/** Same as [formatInterval] but in the phone's language. */
+fun formatInterval(context: Context, minutes: Int): String = when {
+    minutes < 60 -> context.getString(com.smrti.app.R.string.minutes_short, minutes)
+    minutes % 60 == 0 -> context.getString(com.smrti.app.R.string.hours_short, minutes / 60)
+    else -> context.getString(com.smrti.app.R.string.hours_minutes_short, minutes / 60, minutes % 60)
+}

@@ -1,5 +1,6 @@
 package com.smrti.app.ui
 
+import androidx.compose.foundation.layout.heightIn
 import android.content.Intent
 import android.provider.Settings
 import android.text.format.DateFormat
@@ -26,6 +27,13 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -37,7 +45,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -68,13 +75,46 @@ import java.util.Date
 
 private val presets = listOf(1, 10, 60, 300)
 
-private fun timeUntil(target: Long, now: Long): String {
+private fun timeUntil(ctx: android.content.Context, target: Long, now: Long): String {
     val minutes = ((target - now) / 60_000L).coerceAtLeast(0)
     return when {
-        minutes < 1 -> "less than a minute"
-        minutes < 60 -> "$minutes min"
-        else -> "${minutes / 60} hr ${minutes % 60} min"
+        minutes < 1 -> ctx.getString(R.string.less_than_a_minute)
+        minutes < 60 -> ctx.getString(R.string.minutes_short, minutes.toInt())
+        else -> ctx.getString(R.string.hours_minutes_short, (minutes / 60).toInt(), (minutes % 60).toInt())
     }
+}
+
+/**
+ * "Next in 12 min · 14:30". It owns its own clock, ticks only while the app is on screen, and only this
+ * one line is redrawn, so the rest of Home never recomposes just because time passed.
+ */
+@Composable
+private fun NextStatus(enabled: Boolean, tick: Int) {
+    val ctx = LocalContext.current
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var nextAt by remember { mutableLongStateOf(Prefs.nextAt(ctx)) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(tick) {
+        nextAt = Prefs.nextAt(ctx)
+        now = System.currentTimeMillis()
+    }
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                nextAt = Prefs.nextAt(ctx)
+                now = System.currentTimeMillis()
+                delay(20_000)
+            }
+        }
+    }
+    val text = when {
+        !enabled -> stringResource(R.string.off)
+        nextAt > now -> stringResource(
+            R.string.next_in, timeUntil(ctx, nextAt, now), DateFormat.getTimeFormat(ctx).format(Date(nextAt))
+        )
+        else -> stringResource(R.string.starting)
+    }
+    Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
@@ -88,25 +128,17 @@ fun HomeScreen() {
     var preview by remember { mutableStateOf<Quote?>(null) }
     var enabled by remember { mutableStateOf(Prefs.isEnabled(ctx)) }
     var interval by remember { mutableIntStateOf(Prefs.intervalMinutes(ctx)) }
-    var nextAt by remember { mutableLongStateOf(Prefs.nextAt(ctx)) }
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    // bumped when the schedule changes; only the small status line below listens to it (the page itself never ticks)
+    var statusTick by remember { mutableIntStateOf(0) }
     var allowed by remember { mutableStateOf(Notifier.canNotify(ctx)) }
     var showCustom by remember { mutableStateOf(false) }
 
     LaunchedEffect(quoteCount > 0) {
         if (preview == null) preview = db.quotes().random()
     }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(5000)
-            nextAt = Prefs.nextAt(ctx)
-            now = System.currentTimeMillis()
-        }
-    }
     LifecycleResumeEffect(Unit) {
         allowed = Notifier.canNotify(ctx)
-        nextAt = Prefs.nextAt(ctx)
-        now = System.currentTimeMillis()
+        statusTick++
         onPauseOrDispose { }
     }
 
@@ -115,8 +147,7 @@ fun HomeScreen() {
         Prefs.setIntervalMinutes(ctx, minutes)
         if (enabled) {
             Scheduler.scheduleNext(ctx)
-            nextAt = Prefs.nextAt(ctx)
-            now = System.currentTimeMillis()
+            statusTick++
         }
     }
 
@@ -134,7 +165,7 @@ fun HomeScreen() {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Image(painterResource(R.drawable.smrti_mark), contentDescription = null, modifier = Modifier.size(36.dp))
             Spacer(Modifier.width(10.dp))
-            Text("Smrti", fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.app_name), fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
         }
 
         Spacer(Modifier.height(24.dp))
@@ -145,9 +176,9 @@ fun HomeScreen() {
                 if (q == null) {
                     EmptyState(
                         emoji = "✨",
-                        title = "Nothing to remember yet",
-                        message = "Add a quote and it will show up here and in your reminders.",
-                        actionLabel = "Add a quote",
+                        title = stringResource(R.string.nothing_to_remember_yet),
+                        message = stringResource(R.string.add_a_quote_and_it_will),
+                        actionLabel = stringResource(R.string.add_a_quote),
                         verticalPadding = 8.dp
                     ) { Nav.open(Page.AddQuote) }
                 } else {
@@ -165,9 +196,22 @@ fun HomeScreen() {
                     }
                 }
             }
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                preview?.let { q ->
+                    var fav by remember(q.id) { mutableStateOf(q.isFavorite) }
+                    IconButton(onClick = {
+                        fav = !fav
+                        scope.launch { db.quotes().setFavorite(q.id, fav) }
+                    }) {
+                        Icon(
+                            painterResource(if (fav) R.drawable.ic_star else R.drawable.ic_star_outline),
+                            contentDescription = stringResource(if (fav) R.string.remove_favorite else R.string.add_favorite),
+                            tint = if (fav) colors.primary else colors.onSurfaceVariant
+                        )
+                    }
+                }
                 TextButton(onClick = { scope.launch { preview = db.quotes().random() } }) {
-                    Text("Show another")
+                    Text(stringResource(R.string.show_another))
                 }
             }
         }
@@ -175,9 +219,9 @@ fun HomeScreen() {
         if (!allowed) {
             Spacer(Modifier.height(16.dp))
             Panel {
-                Text("Notifications are blocked", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.notifications_are_blocked), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Smrti can't remind you until you allow them.",
+                    stringResource(R.string.smrti_can_t_remind_you_until),
                     style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
                 )
@@ -189,7 +233,7 @@ fun HomeScreen() {
                         )
                     },
                     border = BorderStroke(1.dp, colors.primary)
-                ) { Text("Turn on notifications") }
+                ) { Text(stringResource(R.string.turn_on_notifications)) }
             }
         }
 
@@ -199,39 +243,33 @@ fun HomeScreen() {
         Panel {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Reminders", style = MaterialTheme.typography.titleLarge)
-                    val status = when {
-                        !enabled -> "Off"
-                        nextAt > now -> "Next in ${timeUntil(nextAt, now)} · ${DateFormat.getTimeFormat(ctx).format(Date(nextAt))}"
-                        else -> "Starting…"
-                    }
-                    Text(status, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+                    Text(stringResource(R.string.reminders), style = MaterialTheme.typography.titleLarge)
+                    NextStatus(enabled, statusTick)
                 }
                 Switch(checked = enabled, onCheckedChange = {
                     enabled = it
                     Prefs.setEnabled(ctx, it)
                     if (it) Scheduler.scheduleNext(ctx) else Scheduler.cancel(ctx)
-                    nextAt = Prefs.nextAt(ctx)
-                    now = System.currentTimeMillis()
+                    statusTick++
                 })
             }
 
             Spacer(Modifier.height(20.dp))
-            Text("Remind me every", style = MaterialTheme.typography.titleSmall, color = colors.onSurfaceVariant)
+            Text(stringResource(R.string.remind_me_every), style = MaterialTheme.typography.titleSmall, color = colors.onSurfaceVariant)
             Spacer(Modifier.height(10.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 presets.take(3).forEach { m ->
-                    OptionTile(formatInterval(m), interval == m, Modifier.weight(1f)) { applyInterval(m) }
+                    OptionTile(formatInterval(ctx, m), interval == m, Modifier.weight(1f)) { applyInterval(m) }
                 }
             }
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OptionTile(formatInterval(presets[3]), interval == presets[3], Modifier.weight(1f)) {
+                OptionTile(formatInterval(ctx, presets[3]), interval == presets[3], Modifier.weight(1f)) {
                     applyInterval(presets[3])
                 }
                 OptionTile(
-                    if (customSelected) "Custom · ${formatInterval(interval)}" else "Custom…",
+                    if (customSelected) stringResource(R.string.custom_with, formatInterval(ctx, interval)) else stringResource(R.string.custom_dots),
                     customSelected, Modifier.weight(2f)
                 ) { showCustom = !showCustom }
             }
@@ -254,9 +292,9 @@ fun HomeScreen() {
                     val sent = Notifier.sendNext(ctx)
                     withContext(Dispatchers.Main) {
                         val msg = when {
-                            sent -> "Reminder sent"
-                            !Notifier.canNotify(ctx) -> "Notifications are blocked"
-                            else -> "Nothing to send. Add a quote or turn a category on."
+                            sent -> ctx.getString(R.string.reminder_sent)
+                            !Notifier.canNotify(ctx) -> ctx.getString(R.string.notifications_blocked_toast)
+                            else -> ctx.getString(R.string.nothing_to_send)
                         }
                         Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
                     }
@@ -264,12 +302,12 @@ fun HomeScreen() {
             },
             shape = RoundedCornerShape(18.dp),
             colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = colors.onPrimary),
-            modifier = Modifier.fillMaxWidth().height(56.dp)
-        ) { Text("Send a reminder now", fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+        ) { Text(stringResource(R.string.send_a_reminder_now), fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
 
         Spacer(Modifier.height(16.dp))
         Text(
-            "$quoteCount quotes · ${images.size} images",
+            stringResource(R.string.quotes_images_count, quoteCount, images.size),
             style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
             textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()
         )
@@ -288,29 +326,29 @@ private fun CustomIntervalInline(initialMinutes: Int, onCancel: () -> Unit, onCo
         OutlinedTextField(
             value = value,
             onValueChange = { value = it.filter(Char::isDigit).take(5) },
-            label = { Text("Every") },
+            label = { Text(stringResource(R.string.every)) },
             singleLine = true,
             isError = value.isNotEmpty() && !valid,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = !hours, onClick = { hours = false }, label = { Text("Minutes") })
-            FilterChip(selected = hours, onClick = { hours = true }, label = { Text("Hours") })
+            FilterChip(selected = !hours, onClick = { hours = false }, label = { Text(stringResource(R.string.minutes)) })
+            FilterChip(selected = hours, onClick = { hours = true }, label = { Text(stringResource(R.string.hours)) })
         }
         Text(
-            "Anything from 1 minute to 7 days",
+            stringResource(R.string.anything_from_1_minute_to_7),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onCancel) { Text("Cancel") }
+            TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) }
             Button(
                 enabled = valid,
                 onClick = { onConfirm(minutes!!) },
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.weight(1f).height(48.dp)
-            ) { Text("Set interval") }
+            ) { Text(stringResource(R.string.set_interval)) }
         }
     }
 }

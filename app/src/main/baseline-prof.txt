@@ -1,0 +1,18 @@
+# Baseline profile: tells Android to pre-compile the app's own code at install time, so the first launch
+# and the first scroll don't run in the slow interpreter. (Compose, Material and Coil ship their own
+# profiles, which the profileinstaller dependency applies automatically.)
+# H = hot, S = used at startup, P = post-startup. Wildcards cover every class and method of the app.
+HSPLcom/smrti/app/**;->**(**)**
+Lcom/smrti/app/**;
+# the screens that are on screen right after launch
+HSPLcom/smrti/app/MainActivity;->**(**)**
+HSPLcom/smrti/app/SmrtiApp;->**(**)**
+HSPLcom/smrti/app/ui/HomeScreenKt;->**(**)**
+HSPLcom/smrti/app/ui/ComponentsKt;->**(**)**
+HSPLcom/smrti/app/ui/ThemeKt;->**(**)**
+HSPLcom/smrti/app/ui/QuotesScreenKt;->**(**)**
+HSPLcom/smrti/app/ui/ImagesScreenKt;->**(**)**
+HSPLcom/smrti/app/data/AppDatabase;->**(**)**
+HSPLcom/smrti/app/data/AppDatabase_Impl;->**(**)**
+HSPLcom/smrti/app/data/QuoteDao_Impl;->**(**)**
+HSPLcom/smrti/app/data/ImageDao_Impl;->**(**)**

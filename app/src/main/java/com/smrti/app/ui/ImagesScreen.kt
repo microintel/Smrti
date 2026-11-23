@@ -72,6 +72,24 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.foundation.layout.width
+import android.content.Intent
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.provider.MediaStore
+import android.provider.Settings
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.smrti.app.R
+import com.smrti.app.data.PhotoAccess
+import com.smrti.app.data.PhotoPermission
 
 @Composable
 fun ImagesScreen() {
@@ -85,11 +103,29 @@ fun ImagesScreen() {
     var albumIds by remember { mutableStateOf(Prefs.albumIds(ctx)) }
     var albumPhotos by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var orderMenu by remember { mutableStateOf(false) }
+    var refresh by remember { mutableIntStateOf(0) }
+    var access by remember { mutableStateOf(PhotoPermission.state(ctx)) }
+    val snackbar = remember { SnackbarHostState() }
+
+    // photos added to a chosen album later show up without having to re-pick the albums
+    DisposableEffect(Unit) {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) { refresh++ }
+        }
+        try { ctx.contentResolver.registerContentObserver(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, observer) }
+        catch (_: Exception) { }
+        onDispose { ctx.contentResolver.unregisterContentObserver(observer) }
+    }
+    LifecycleResumeEffect(Unit) {
+        access = PhotoPermission.state(ctx)
+        refresh++
+        onPauseOrDispose { }
+    }
 
     // the album page changes the saved choice: pick it up when that page closes
     LaunchedEffect(Nav.page) { if (Nav.page == null) albumIds = Prefs.albumIds(ctx) }
     // photos of the chosen albums, shown in the grid below
-    LaunchedEffect(albumIds) {
+    LaunchedEffect(albumIds, refresh) {
         albumPhotos = withContext(Dispatchers.IO) { AlbumStore.imageUris(ctx, albumIds) }
     }
 
@@ -102,27 +138,43 @@ fun ImagesScreen() {
     }
     fun hasAccess() = permissions.any { ContextCompat.checkSelfPermission(ctx, it) == PackageManager.PERMISSION_GRANTED }
     val askPhotos = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        access = PhotoPermission.state(ctx)
         if (hasAccess()) Nav.open(Page.Albums)
-        else Toast.makeText(ctx, "Allow photo access to pick albums", Toast.LENGTH_SHORT).show()
+        else Toast.makeText(ctx, ctx.getString(R.string.allow_photo_access), Toast.LENGTH_SHORT).show()
     }
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
-        scope.launch { uris.forEach { ImageStore.import(ctx, it) } }
+    // the originals are used in place: nothing is copied, and the import can't be cut off by leaving the screen
+    val picker = rememberLauncherForActivityResult(remember { PickPersistableImages() }) { uris ->
+        if (uris.isNotEmpty()) ImageStore.importAsync(ctx, uris)
+    }
+    fun pickPhotos() = picker.launch(arrayOf("image/*"))
+
+    fun removeWithUndo(image: com.smrti.app.data.QuoteImage) {
+        scope.launch {
+            ImageStore.removeEntry(ctx, image)
+            snackbar.currentSnackbarData?.dismiss()
+            val result = snackbar.showSnackbar(
+                message = ctx.getString(R.string.picture_removed),
+                actionLabel = ctx.getString(R.string.undo),
+                duration = SnackbarDuration.Short
+            )
+            if (result == SnackbarResult.ActionPerformed) ImageStore.restore(ctx, image) else ImageStore.finishRemove(image)
+        }
     }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             ScreenTitle(
-                "Images",
+                stringResource(R.string.images),
                 buildString {
-                    append("${images.size} saved")
-                    if (albumIds.isNotEmpty()) append(" · ${albumIds.size} album${if (albumIds.size == 1) "" else "s"}")
-                    append(if (order == Prefs.ORDER_SERIES) " · shown in order" else " · shown at random")
+                    append(ctx.getString(R.string.images_saved, images.size))
+                    if (albumIds.isNotEmpty()) append(" · " + ctx.resources.getQuantityString(R.plurals.n_albums, albumIds.size, albumIds.size))
+                    append(" · " + ctx.getString(if (order == Prefs.ORDER_SERIES) R.string.shown_in_order else R.string.shown_at_random))
                 },
                 Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp)
             )
             LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
+                columns = GridCells.Adaptive(110.dp),
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 100.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -132,7 +184,7 @@ fun ImagesScreen() {
                         // compact drop-down instead of two big tiles
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("Show images", style = MaterialTheme.typography.bodyLarge)
+                                Text(stringResource(R.string.show_images), style = MaterialTheme.typography.bodyLarge)
                                 Text(
                                     if (order == Prefs.ORDER_SERIES) "One after another, then loops" else "A different one each time",
                                     style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant
@@ -153,17 +205,17 @@ fun ImagesScreen() {
                                         if (order == Prefs.ORDER_SERIES) "In series" else "Random",
                                         style = MaterialTheme.typography.bodyMedium, color = colors.primary
                                     )
-                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Change order", tint = colors.onSurfaceVariant)
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = stringResource(R.string.change_order), tint = colors.onSurfaceVariant)
                                 }
                                 DropdownMenu(expanded = orderMenu, onDismissRequest = { orderMenu = false }) {
                                     DropdownMenuItem(
-                                        text = { Text("Random", color = if (order == Prefs.ORDER_RANDOM) colors.primary else colors.onSurface) },
+                                        text = { Text(stringResource(R.string.random), color = if (order == Prefs.ORDER_RANDOM) colors.primary else colors.onSurface) },
                                         onClick = {
                                             order = Prefs.ORDER_RANDOM; Prefs.setImageOrder(ctx, order); orderMenu = false
                                         }
                                     )
                                     DropdownMenuItem(
-                                        text = { Text("In series", color = if (order == Prefs.ORDER_SERIES) colors.primary else colors.onSurface) },
+                                        text = { Text(stringResource(R.string.in_series), color = if (order == Prefs.ORDER_SERIES) colors.primary else colors.onSurface) },
                                         onClick = {
                                             order = Prefs.ORDER_SERIES; Prefs.setImageOrder(ctx, order); orderMenu = false
                                         }
@@ -174,17 +226,35 @@ fun ImagesScreen() {
                         Spacer(Modifier.height(12.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("Phone albums", style = MaterialTheme.typography.bodyLarge)
+                                Text(stringResource(R.string.phone_albums), style = MaterialTheme.typography.bodyLarge)
                                 Text(
-                                    if (albumIds.isEmpty()) "Use every photo from albums you choose"
-                                    else "${albumIds.size} selected · ${albumPhotos.size} photos",
+                                    if (albumIds.isEmpty()) stringResource(R.string.use_every_photo)
+                                    else stringResource(R.string.n_selected_photos, albumIds.size, albumPhotos.size),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = colors.onSurfaceVariant
                                 )
                             }
                             TextButton(onClick = { if (hasAccess()) Nav.open(Page.Albums) else askPhotos.launch(permissions) }) {
-                                Text("Choose")
+                                Text(stringResource(R.string.choose))
                             }
+                        }
+                    }
+                }
+
+                if (access == PhotoAccess.PARTIAL) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Panel {
+                            Text(stringResource(R.string.limited_access_title), style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                stringResource(R.string.limited_access_message),
+                                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                            )
+                            OutlinedButton(onClick = {
+                                ctx.startActivity(
+                                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", ctx.packageName, null))
+                                )
+                            }) { Text(stringResource(R.string.allow_all_photos)) }
                         }
                     }
                 }
@@ -193,57 +263,49 @@ fun ImagesScreen() {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         EmptyState(
                             emoji = "🖼️",
-                            title = "No pictures yet",
-                            message = "Add photos, or choose a whole album, and one will appear with each reminder.",
-                            actionLabel = "Add photos"
-                        ) { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                            title = stringResource(R.string.no_pictures_yet),
+                            message = stringResource(R.string.add_photos_or_choose_a_whole),
+                            actionLabel = stringResource(R.string.add_photos)
+                        ) { pickPhotos() }
                     }
                 }
 
                 if (images.isNotEmpty() && albumPhotos.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) { GridLabel("Saved in Smrti · ${images.size}") }
+                    item(span = { GridItemSpan(maxLineSpan) }) { GridLabel(stringResource(R.string.saved_in_smrti, images.size)) }
                 }
                 items(images, key = { "saved-${it.id}" }) { image ->
                     Box(Modifier.aspectRatio(1f).clip(RoundedCornerShape(16.dp))) {
-                        AsyncImage(
-                            model = File(image.path),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        Thumbnail(imageModel(image.path), Modifier.fillMaxSize())
                         Box(
                             Modifier
                                 .align(Alignment.TopEnd)
                                 .padding(4.dp)
                                 .size(32.dp)
                                 .background(Color(0x99000000), CircleShape)
-                                .clickable { scope.launch { ImageStore.remove(ctx, image) } },
+                                .clickable { removeWithUndo(image) },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Delete, contentDescription = "Remove", tint = Color.White, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.remove), tint = Color.White, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
 
                 // photos from the albums that were picked (they stay in the gallery, so no delete here)
                 if (albumPhotos.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) { GridLabel("From your albums · ${albumPhotos.size}") }
+                    item(span = { GridItemSpan(maxLineSpan) }) { GridLabel(stringResource(R.string.from_your_albums, albumPhotos.size)) }
                     items(albumPhotos, key = { "album-$it" }) { uri ->
-                        AsyncImage(
-                            model = uri,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.aspectRatio(1f).clip(RoundedCornerShape(16.dp))
-                        )
+                        Thumbnail(uri, Modifier.aspectRatio(1f).clip(RoundedCornerShape(16.dp)))
                     }
                 }
             }
         }
 
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(horizontal = 12.dp, vertical = 8.dp))
+
         ExtendedFloatingActionButton(
-            onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+            onClick = { pickPhotos() },
             icon = { Icon(Icons.Default.Add, contentDescription = null) },
-            text = { Text("Add photos") },
+            text = { Text(stringResource(R.string.add_photos)) },
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary

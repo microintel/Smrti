@@ -28,9 +28,12 @@ object Scheduler {
             context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
 
     /** (Re)schedules the next reminder one interval from now. Replaces any pending one. */
-    fun scheduleNext(context: Context) {
+    fun scheduleNext(context: Context) =
+        scheduleAt(context, System.currentTimeMillis() + Prefs.intervalMinutes(context) * 60_000L)
+
+    private fun scheduleAt(context: Context, requested: Long) {
         val am = context.getSystemService(AlarmManager::class.java)
-        var at = System.currentTimeMillis() + Prefs.intervalMinutes(context) * 60_000L
+        var at = requested
         if (isQuiet(context, at)) at = quietEndAfter(context, at)
         Prefs.setNextAt(context, at)
         val pi = pendingIntent(context)
@@ -45,6 +48,10 @@ object Scheduler {
             am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
         }
     }
+
+    /** The phone was locked when a reminder was due: try again soon, so it shows once the phone is unlocked. */
+    fun scheduleRetry(context: Context) =
+        scheduleAt(context, System.currentTimeMillis() + 2 * 60_000L)
 
     fun cancel(context: Context) {
         context.getSystemService(AlarmManager::class.java).cancel(pendingIntent(context))
@@ -93,12 +100,16 @@ class ReminderReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 if (Prefs.isEnabled(app)) {
+                    var waitForUnlock = false
                     try {
-                        if (!Scheduler.isQuiet(app, System.currentTimeMillis())) Notifier.sendNext(app)
+                        if (!Scheduler.isQuiet(app, System.currentTimeMillis())) {
+                            // locked or screen off: don't show it now, retry in a couple of minutes
+                            if (Notifier.isDeviceLocked(app)) waitForUnlock = true else Notifier.sendNext(app)
+                        }
                     } catch (_: Throwable) {
                         // a failed notification must not crash the app; the next one is still scheduled
                     }
-                    Scheduler.scheduleNext(app)
+                    if (waitForUnlock) Scheduler.scheduleRetry(app) else Scheduler.scheduleNext(app)
                 }
             } finally {
                 pending.finish()
