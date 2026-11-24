@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- in-app updates: check GitHub, download the new APK, hand it to Android's installer -->
@@ -11,6 +12,13 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+
+    <!-- Scroll Guard: see which app is in front (Usage access, granted by the person in Settings) -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
+    <!-- Scroll Guard pop-up: "Display over other apps" (optional; without it only the notification shows) -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application
         android:name=".SmrtiApp"
@@ -53,6 +61,15 @@
             android:name=".notify.NotificationActionReceiver"
             android:exported="false" />
 
+        <!-- Scroll Guard: a small background watcher that counts time in X / Instagram / YouTube -->
+        <service
+            android:name=".notify.ScrollGuardService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Counts time spent in chosen apps and warns when a limit is reached" />
+        </service>
         <receiver
             android:name=".widget.SmrtiWidget"
             android:exported="true">

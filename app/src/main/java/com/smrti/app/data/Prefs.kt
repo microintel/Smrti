@@ -74,6 +74,21 @@ object Prefs {
     fun setCustomEmojis(c: Context, v: List<String>) =
         sp(c).edit().putString("custom_emojis", v.joinToString(EMOJI_SEP)).apply()
 
+    // Scroll Guard: time limit for X / Instagram / YouTube
+    fun guardEnabled(c: Context) = sp(c).getBoolean("guard_on", true)
+    fun setGuardEnabled(c: Context, v: Boolean) = sp(c).edit().putBoolean("guard_on", v).apply()
+    fun guardApps(c: Context): Set<String> =
+        sp(c).getStringSet("guard_apps", setOf("com.twitter.android", "com.instagram.android", "com.google.android.youtube"))?.toSet() ?: emptySet()
+    fun setGuardApps(c: Context, v: Set<String>) = sp(c).edit().putStringSet("guard_apps", v).apply()
+    fun guardLimitMinutes(c: Context) = sp(c).getInt("guard_limit_min", 30)
+    fun setGuardLimitMinutes(c: Context, v: Int) = sp(c).edit().putInt("guard_limit_min", v.coerceIn(1, 24 * 60)).apply()
+    /** Minutes before the limit to send the early heads-up; 0 = no early heads-up. */
+    fun guardWarnMinutes(c: Context) = sp(c).getInt("guard_warn_min", 5)
+    fun setGuardWarnMinutes(c: Context, v: Int) = sp(c).edit().putInt("guard_warn_min", v.coerceAtLeast(0)).apply()
+    /** The message shown when time is up; empty = the built-in one. */
+    fun guardMessage(c: Context) = sp(c).getString("guard_message", "") ?: ""
+    fun setGuardMessage(c: Context, v: String) = sp(c).edit().putString("guard_message", v).apply()
+
     fun isDefaultsV2(c: Context) = sp(c).getBoolean("defaults_v2", false)
     fun setDefaultsV2(c: Context) = sp(c).edit().putBoolean("defaults_v2", true).apply()
 

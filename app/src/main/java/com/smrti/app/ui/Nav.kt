@@ -50,6 +50,7 @@ sealed interface Page {
     data class EditQuote(val quote: com.smrti.app.data.Quote) : Page
     data object Onboarding : Page
     data object Reliability : Page
+    data object ScrollGuard : Page
 }
 
 object Nav {
@@ -94,6 +95,7 @@ fun PageHost(modifier: Modifier = Modifier) {
                     Page.About -> AboutPage()
                     Page.Onboarding -> OnboardingPage()
                     Page.Reliability -> ReliabilityPage()
+                    Page.ScrollGuard -> ScrollGuardPage()
                     null -> {}
                 }
             }

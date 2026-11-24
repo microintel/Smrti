@@ -21,6 +21,7 @@ class SmrtiApp : Application(), ImageLoaderFactory {
         Prefs.initOnboarding(this)
         Notifier.createChannel(this)
         Scheduler.ensureScheduled(this)
+        com.smrti.app.notify.ScrollGuardService.sync(this)
         AppScope.io.launch {
             QuoteImporter.seedIfNeeded(this@SmrtiApp)
             ImageStore.cleanUp(this@SmrtiApp)

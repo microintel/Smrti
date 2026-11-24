@@ -251,6 +251,13 @@ fun SettingsScreen() {
         }
         }
 
+        SectionLabel(stringResource(R.string.guard_title))
+        Panel {
+            SettingRow(stringResource(R.string.guard_title), stringResource(R.string.guard_row_sub)) {
+                TextButton(onClick = { Nav.open(Page.ScrollGuard) }) { Text(stringResource(R.string.open)) }
+            }
+        }
+
         SectionLabel(stringResource(R.string.about))
         Panel {
             SettingRow(stringResource(R.string.about_smrti), stringResource(R.string.version_by, appVersion(ctx))) {

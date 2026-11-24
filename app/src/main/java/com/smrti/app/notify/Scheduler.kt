@@ -124,5 +124,6 @@ class BootReceiver : BroadcastReceiver() {
         try {
             if (Prefs.isEnabled(context)) Scheduler.scheduleNext(context)
         } catch (_: Throwable) { }
+        ScrollGuardService.sync(context)
     }
 }

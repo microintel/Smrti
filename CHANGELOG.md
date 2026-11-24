@@ -3,6 +3,8 @@
 Add a new section at the top for every update, then copy it into the GitHub Release notes.
 
 ## Next
+- Scroll Guard now shows today's time in X, Instagram and YouTube and how many warnings were sent (from 0 each day), and shows a pop-up over the app when time is up (needs "Display over other apps").
+- Scroll Guard (Settings): a countdown starts when X, Instagram or YouTube opens and resets when you leave. Set the limit in hours and minutes; a heads-up and a time-is-up notification (with your own message and a Close button) follow. Needs Usage access, which only tells which app is open.
 - In-app updates: the app checks GitHub (docs/downloads/version.json) when opened and shows an "Update" card on Home; Settings has a "Check" button. Tap Update to download, verify (SHA-256) and install.
 - CI now takes the app version from the tag (v1.3 -> 1.3) and can sign with a fixed key (secrets SMRTI_KEYSTORE_BASE64, SMRTI_STORE_PASSWORD, SMRTI_KEY_ALIAS, SMRTI_KEY_PASSWORD) so updates install over the old app.
 
