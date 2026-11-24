@@ -2,6 +2,10 @@
 
 Add a new section at the top for every update, then copy it into the GitHub Release notes.
 
+## Next
+- In-app updates: the app checks GitHub (docs/downloads/version.json) when opened and shows an "Update" card on Home; Settings has a "Check" button. Tap Update to download, verify (SHA-256) and install.
+- CI now takes the app version from the tag (v1.3 -> 1.3) and can sign with a fixed key (secrets SMRTI_KEYSTORE_BASE64, SMRTI_STORE_PASSWORD, SMRTI_KEY_ALIAS, SMRTI_KEY_PASSWORD) so updates install over the old app.
+
 ## 1.2
 Speed
 - Release builds are shrunk with R8 and ship a baseline profile, so the first launch and first scroll are faster.

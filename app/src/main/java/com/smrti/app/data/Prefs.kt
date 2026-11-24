@@ -89,8 +89,16 @@ object Prefs {
     fun setOnboarded(c: Context) = sp(c).edit().putBoolean("onboarded", true).apply()
 
     // The quote of the latest reminder, shown on the home screen widget
+    // Show the quote's picture behind the words on the widget (also needs "Show images" to be on)
+    fun widgetImages(c: Context) = sp(c).getBoolean("widget_images", true)
+    fun setWidgetImages(c: Context, v: Boolean) = sp(c).edit().putBoolean("widget_images", v).apply()
+
     fun lastQuoteId(c: Context) = sp(c).getLong("last_quote_id", 0L)
     fun setLastQuoteId(c: Context, v: Long) = sp(c).edit().putLong("last_quote_id", v).apply()
+
+    // The picture shown with it: a path/uri, "" = no picture, null = not decided yet
+    fun lastWidgetImage(c: Context): String? = sp(c).getString("last_widget_image", null)
+    fun setLastWidgetImage(c: Context, v: String?) = sp(c).edit().putString("last_widget_image", v).apply()
 
     fun isSeeded(c: Context) = sp(c).getBoolean("seeded", false)
     fun setSeeded(c: Context) = sp(c).edit().putBoolean("seeded", true).apply()

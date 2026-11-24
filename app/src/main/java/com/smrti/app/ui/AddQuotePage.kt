@@ -180,6 +180,7 @@ private fun EmojiPopup(onPick: (String) -> Unit, onDismiss: () -> Unit) {
                         // your own emojis: add from your keyboard, tap to use, hold to remove
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(
+                colors = quietFieldColors(),
                                 value = newEmoji, onValueChange = { newEmoji = it },
                                 placeholder = { Text(stringResource(R.string.type_or_paste_emoji)) },
                                 singleLine = true, shape = RoundedCornerShape(14.dp),
@@ -241,7 +242,6 @@ private fun CategoryDropdown(selected: String, options: List<String>, onSelect: 
                 .heightIn(min = 52.dp)
                 .clip(shape)
                 .background(colors.surface)
-                .border(1.dp, colors.outline, shape)
                 .clickable { open = true }
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -290,6 +290,7 @@ private fun NewCategoryDialog(onCreate: (name: String, emoji: String) -> Unit, o
                     contentAlignment = Alignment.Center
                 ) { Text(emoji, fontSize = 26.sp) }
                 OutlinedTextField(
+                colors = quietFieldColors(),
                     value = name, onValueChange = { name = it.take(24) },
                     label = { Text(stringResource(R.string.category_name)) },
                     singleLine = true, shape = RoundedCornerShape(14.dp),
@@ -368,7 +369,6 @@ fun AddQuotePage(editing: Quote? = null) {
                     .fillMaxWidth()
                     .clip(writeShape)
                     .background(colors.surface)
-                    .border(1.dp, colors.outline, writeShape)
                     .padding(horizontal = 6.dp, vertical = 4.dp)
             ) {
                 TextField(
@@ -409,7 +409,6 @@ fun AddQuotePage(editing: Quote? = null) {
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp))
                     .background(colors.surface)
-                    .border(1.dp, colors.outline, RoundedCornerShape(20.dp))
                     .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {

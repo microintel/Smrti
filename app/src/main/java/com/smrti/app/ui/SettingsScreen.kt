@@ -1,5 +1,6 @@
 package com.smrti.app.ui
 
+import com.smrti.app.widget.SmrtiWidget
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -80,10 +81,13 @@ fun SettingsScreen() {
     var exact by remember { mutableStateOf(Scheduler.canScheduleExact(ctx)) }
     var editingTime by remember { mutableStateOf<String?>(null) } // "start" | "end"
     var themeMode by remember { mutableStateOf(ThemeState.mode) }
+    var widgetImages by remember { mutableStateOf(Prefs.widgetImages(ctx)) }
+    var widgetPlaced by remember { mutableStateOf(SmrtiWidget.isPlaced(ctx)) }
 
     LifecycleResumeEffect(Unit) {
         allowed = Notifier.canNotify(ctx)
         exact = Scheduler.canScheduleExact(ctx)
+        widgetPlaced = SmrtiWidget.isPlaced(ctx)
         onPauseOrDispose { }
     }
 
@@ -92,7 +96,7 @@ fun SettingsScreen() {
             .fillMaxSize()
             .imePadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp)
+            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp + LocalNavInset.current)
     ) {
         ScreenTitle(stringResource(R.string.settings))
 
@@ -126,6 +130,7 @@ fun SettingsScreen() {
             Switch(checked = useImages, onCheckedChange = {
                 useImages = it
                 Prefs.setUseImages(ctx, it)
+                Prefs.setLastWidgetImage(ctx, null) // the widget re-decides its picture
             })
         }
         SettingRow(stringResource(R.string.large_image_banner), stringResource(R.string.large_image_sub)) {
@@ -134,6 +139,52 @@ fun SettingsScreen() {
                 Prefs.setLargeImage(ctx, it)
             })
         }
+        }
+
+        SectionLabel(stringResource(R.string.widget_section))
+        Panel {
+            Text(stringResource(R.string.widget_how_title), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                stringResource(R.string.widget_how_body),
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+            Spacer(Modifier.height(14.dp))
+            listOf(R.string.widget_step_1, R.string.widget_step_2, R.string.widget_step_3).forEachIndexed { i, step ->
+                Row(Modifier.padding(vertical = 4.dp)) {
+                    Text(
+                        "${i + 1}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.width(24.dp)
+                    )
+                    Text(stringResource(step), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                stringResource(if (widgetPlaced) R.string.widget_status_on else R.string.widget_status_off),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!widgetPlaced) QuietButton(onClick = {
+                    // the phone asks you to confirm; if it can't, the steps above still work
+                    val asked = try { SmrtiWidget.requestPin(ctx) } catch (_: Throwable) { false }
+                    if (!asked) android.widget.Toast.makeText(ctx, ctx.getString(R.string.widget_pin_unsupported), android.widget.Toast.LENGTH_LONG).show()
+                }) { Text(stringResource(R.string.widget_add)) }
+                QuietButton(onClick = { SmrtiWidget.showAnother(ctx) }, enabled = widgetPlaced) {
+                    Text(stringResource(R.string.widget_another))
+                }
+            }
+        }
+        Panel(Modifier.padding(top = 12.dp)) {
+            SettingRow(stringResource(R.string.widget_show_picture), stringResource(R.string.widget_show_picture_sub)) {
+                Switch(checked = widgetImages, onCheckedChange = {
+                    widgetImages = it
+                    Prefs.setWidgetImages(ctx, it)
+                    Prefs.setLastWidgetImage(ctx, null) // choose again, now under the new setting
+                    SmrtiWidget.refresh(ctx)
+                })
+            }
         }
 
         SectionLabel(stringResource(R.string.quiet_hours))
@@ -146,10 +197,10 @@ fun SettingsScreen() {
         }
         if (quietOn) {
             Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = { editingTime = if (editingTime == "start") null else "start" }) {
+                QuietButton(onClick = { editingTime = if (editingTime == "start") null else "start" }) {
                     Text(stringResource(R.string.from_time, formatClock(quietStart)))
                 }
-                OutlinedButton(onClick = { editingTime = if (editingTime == "end") null else "end" }) {
+                QuietButton(onClick = { editingTime = if (editingTime == "end") null else "end" }) {
                     Text(stringResource(R.string.until_time, formatClock(quietEnd)))
                 }
             }
@@ -205,6 +256,7 @@ fun SettingsScreen() {
             SettingRow(stringResource(R.string.about_smrti), stringResource(R.string.version_by, appVersion(ctx))) {
                 TextButton(onClick = { Nav.open(Page.About) }) { Text(stringResource(R.string.open)) }
             }
+            UpdateSettingsRow()
         }
     }
 
@@ -285,6 +337,34 @@ fun AboutPage() {
                 )
             }
 
+            Spacer(Modifier.height(12.dp))
+            Panel {
+                Text(stringResource(R.string.about_problem_title), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.about_problem_body),
+                    style = MaterialTheme.typography.bodyMedium, color = muted
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+            Panel {
+                Text(stringResource(R.string.about_how_title), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+                listOf(
+                    R.string.about_how_1, R.string.about_how_2, R.string.about_how_3,
+                    R.string.about_how_4, R.string.about_how_5
+                ).forEachIndexed { i, step ->
+                    Row(Modifier.padding(vertical = 4.dp)) {
+                        Text(
+                            "${i + 1}", style = MaterialTheme.typography.labelLarge, color = colors.primary,
+                            modifier = Modifier.width(24.dp)
+                        )
+                        Text(stringResource(step), style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+
             Spacer(Modifier.height(32.dp))
             Text(stringResource(R.string.developed_by), style = MaterialTheme.typography.labelMedium, color = muted)
             Spacer(Modifier.height(10.dp))
@@ -312,7 +392,7 @@ fun AboutPage() {
                         modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = {
+                        QuietButton(onClick = {
                             val send = Intent(Intent.ACTION_SEND).setType("text/plain")
                                 .putExtra(Intent.EXTRA_TEXT, report.takeLast(20000))
                             ctx.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

@@ -175,7 +175,7 @@ fun ImagesScreen() {
             )
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(110.dp),
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 100.dp),
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 100.dp + LocalNavInset.current),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -196,7 +196,6 @@ fun ImagesScreen() {
                                     Modifier
                                         .clip(menuShape)
                                         .background(colors.surfaceVariant)
-                                        .border(1.dp, colors.outline, menuShape)
                                         .clickable { orderMenu = true }
                                         .padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
@@ -250,7 +249,7 @@ fun ImagesScreen() {
                                 style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
                                 modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
                             )
-                            OutlinedButton(onClick = {
+                            QuietButton(onClick = {
                                 ctx.startActivity(
                                     Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", ctx.packageName, null))
                                 )
@@ -300,13 +299,13 @@ fun ImagesScreen() {
             }
         }
 
-        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(horizontal = 12.dp, vertical = 8.dp))
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp + LocalNavInset.current))
 
         ExtendedFloatingActionButton(
             onClick = { pickPhotos() },
             icon = { Icon(Icons.Default.Add, contentDescription = null) },
             text = { Text(stringResource(R.string.add_photos)) },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 20.dp + LocalNavInset.current),
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary
         )

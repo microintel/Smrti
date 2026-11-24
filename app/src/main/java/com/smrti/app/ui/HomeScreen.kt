@@ -1,5 +1,18 @@
 package com.smrti.app.ui
 
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import com.smrti.app.data.ImagePool
+import coil.size.Size
+import coil.request.ImageRequest
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.heightIn
 import android.content.Intent
 import android.provider.Settings
@@ -73,7 +86,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Date
 
-private val presets = listOf(1, 10, 60, 300)
+/** What the timing drop-down offers (anything else goes through Custom). */
+private val intervalChoices = listOf(1, 5, 10, 15, 30, 60, 120, 180, 300, 720, 1440)
 
 private fun timeUntil(ctx: android.content.Context, target: Long, now: Long): String {
     val minutes = ((target - now) / 60_000L).coerceAtLeast(0)
@@ -136,6 +150,14 @@ fun HomeScreen() {
     LaunchedEffect(quoteCount > 0) {
         if (preview == null) preview = db.quotes().random()
     }
+    // the quote's own picture, or a random one from the library (same rule as the notifications)
+    var previewImage by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(preview?.id, images.isEmpty()) {
+        val q = preview
+        previewImage = if (q == null || !Prefs.useImages(ctx)) null else try {
+            q.imagePath ?: ImagePool.randomSource(ctx)
+        } catch (_: Throwable) { null }
+    }
     LifecycleResumeEffect(Unit) {
         allowed = Notifier.canNotify(ctx)
         statusTick++
@@ -152,14 +174,14 @@ fun HomeScreen() {
     }
 
     val colors = MaterialTheme.colorScheme
-    val customSelected = interval !in presets
+    val customSelected = interval !in intervalChoices
 
     Column(
         Modifier
             .fillMaxSize()
             .imePadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp)
+            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp + LocalNavInset.current)
     ) {
         // Header
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -168,7 +190,9 @@ fun HomeScreen() {
             Text(stringResource(R.string.app_name), fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
         }
 
+        UpdateAutoCheck()
         Spacer(Modifier.height(24.dp))
+        UpdateBanner()
 
         // Quote
         Panel {
@@ -182,7 +206,39 @@ fun HomeScreen() {
                         verticalPadding = 8.dp
                     ) { Nav.open(Page.AddQuote) }
                 } else {
-                    Column {
+                    val picture = previewImage
+                    if (picture != null) {
+                        // the quote written over its picture
+                        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))) {
+                            AsyncImage(
+                                model = remember(picture) {
+                                    ImageRequest.Builder(ctx).data(imageModel(picture)).size(Size(1080, 1080)).build()
+                                },
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                onError = { previewImage = null },
+                                modifier = Modifier.matchParentSize()
+                            )
+                            // darkens the picture so the words stay readable
+                            Box(
+                                Modifier.matchParentSize().background(
+                                    Brush.verticalGradient(listOf(Color(0x59000000), Color(0xD9000000)))
+                                )
+                            )
+                            Column(
+                                Modifier.fillMaxWidth().heightIn(min = 280.dp).padding(20.dp),
+                                verticalArrangement = Arrangement.Bottom
+                            ) {
+                                Text(q.category, style = MaterialTheme.typography.labelLarge, color = Color(0xFFFAB62F))
+                                Spacer(Modifier.height(10.dp))
+                                Text(q.text, fontFamily = FontFamily.Serif, fontSize = 23.sp, lineHeight = 33.sp, color = Color(0xFFF6F1E4))
+                                if (q.author.isNotBlank()) {
+                                    Spacer(Modifier.height(10.dp))
+                                    Text("— ${q.author}", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD5DAE8))
+                                }
+                            }
+                        }
+                    } else Column {
                         Text(
                             q.category,
                             style = MaterialTheme.typography.labelLarge, color = colors.primary
@@ -225,14 +281,13 @@ fun HomeScreen() {
                     style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
                 )
-                OutlinedButton(
+                QuietButton(
                     onClick = {
                         ctx.startActivity(
                             Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                                 .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
                         )
                     },
-                    border = BorderStroke(1.dp, colors.primary)
                 ) { Text(stringResource(R.string.turn_on_notifications)) }
             }
         }
@@ -258,20 +313,58 @@ fun HomeScreen() {
             Text(stringResource(R.string.remind_me_every), style = MaterialTheme.typography.titleSmall, color = colors.onSurfaceVariant)
             Spacer(Modifier.height(10.dp))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                presets.take(3).forEach { m ->
-                    OptionTile(formatInterval(ctx, m), interval == m, Modifier.weight(1f)) { applyInterval(m) }
+            // a drop-down: the timing is rarely changed, so it stays tucked away until needed
+            var menuOpen by remember { mutableStateOf(false) }
+            Box(Modifier.fillMaxWidth()) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(colors.surfaceVariant)
+                        .clickable { menuOpen = true }
+                        .padding(start = 16.dp, end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        formatInterval(ctx, interval),
+                        style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (customSelected) Text(
+                        stringResource(R.string.custom_dots).trimEnd('…', '.'),
+                        style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant,
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                    androidx.compose.material3.Icon(
+                        androidx.compose.material.icons.Icons.Filled.ArrowDropDown,
+                        contentDescription = null, tint = colors.onSurfaceVariant
+                    )
                 }
-            }
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OptionTile(formatInterval(ctx, presets[3]), interval == presets[3], Modifier.weight(1f)) {
-                    applyInterval(presets[3])
+                androidx.compose.material3.DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    intervalChoices.forEach { m ->
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = {
+                                Text(
+                                    formatInterval(ctx, m),
+                                    color = if (interval == m) colors.primary else colors.onSurface,
+                                    fontWeight = if (interval == m) FontWeight.SemiBold else FontWeight.Normal
+                                )
+                            },
+                            onClick = { menuOpen = false; showCustom = false; applyInterval(m) }
+                        )
+                    }
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = {
+                            Text(
+                                if (customSelected) stringResource(R.string.custom_with, formatInterval(ctx, interval)) else stringResource(R.string.custom_dots),
+                                color = if (customSelected) colors.primary else colors.onSurface,
+                                fontWeight = if (customSelected) FontWeight.SemiBold else FontWeight.Normal
+                            )
+                        },
+                        onClick = { menuOpen = false; showCustom = true }
+                    )
                 }
-                OptionTile(
-                    if (customSelected) stringResource(R.string.custom_with, formatInterval(ctx, interval)) else stringResource(R.string.custom_dots),
-                    customSelected, Modifier.weight(2f)
-                ) { showCustom = !showCustom }
             }
             // typed right here in the panel, no pop-up
             if (showCustom) {
@@ -324,6 +417,7 @@ private fun CustomIntervalInline(initialMinutes: Int, onCancel: () -> Unit, onCo
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(
+                colors = quietFieldColors(),
             value = value,
             onValueChange = { value = it.filter(Char::isDigit).take(5) },
             label = { Text(stringResource(R.string.every)) },
@@ -333,8 +427,8 @@ private fun CustomIntervalInline(initialMinutes: Int, onCancel: () -> Unit, onCo
             modifier = Modifier.fillMaxWidth()
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = !hours, onClick = { hours = false }, label = { Text(stringResource(R.string.minutes)) })
-            FilterChip(selected = hours, onClick = { hours = true }, label = { Text(stringResource(R.string.hours)) })
+            QuietFilterChip(selected = !hours, onClick = { hours = false }, label = { Text(stringResource(R.string.minutes)) })
+            QuietFilterChip(selected = hours, onClick = { hours = true }, label = { Text(stringResource(R.string.hours)) })
         }
         Text(
             stringResource(R.string.anything_from_1_minute_to_7),

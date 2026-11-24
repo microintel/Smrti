@@ -29,7 +29,9 @@ data class Quote(
     val lastShownAt: Long = 0,
     @ColumnInfo(defaultValue = "0") val isFavorite: Boolean = false,
     /** Picture chosen for this quote (content:// uri or file path). Null = pick a random one. */
-    val imagePath: String? = null
+    val imagePath: String? = null,
+    /** Active quotes can be sent as reminders; inactive ones are kept but never sent. */
+    @ColumnInfo(defaultValue = "1") val isActive: Boolean = true
 )
 
 /** [path] is either a content:// uri of the original photo (v1.2+) or a file path of a copy made by older versions. */
@@ -83,14 +85,34 @@ interface QuoteDao {
     // One page at a time for the Quotes tab; empty q / category and favOnly = 0 mean "no filter".
     @Query(
         "SELECT * FROM quotes WHERE (:category = '' OR category = :category) " +
-            "AND (:favOnly = 0 OR isFavorite = 1) " +
+            "AND (:favOnly = 0 OR isFavorite = 1) AND isActive = :active " +
             "AND (:q = '' OR text LIKE '%' || :q || '%' OR author LIKE '%' || :q || '%') " +
             "ORDER BY id DESC"
     )
-    fun paged(q: String, category: String, favOnly: Int): PagingSource<Int, Quote>
+    fun paged(q: String, category: String, favOnly: Int, active: Int): PagingSource<Int, Quote>
+
+    // Every quote the current search / filter matches (what "Select all" picks), not just the loaded page.
+    @Query(
+        "SELECT id FROM quotes WHERE (:category = '' OR category = :category) " +
+            "AND (:favOnly = 0 OR isFavorite = 1) AND isActive = :active " +
+            "AND (:q = '' OR text LIKE '%' || :q || '%' OR author LIKE '%' || :q || '%')"
+    )
+    suspend fun matchingIds(q: String, category: String, favOnly: Int, active: Int): List<Long>
+
+    @Query("SELECT * FROM quotes WHERE id IN (:ids)")
+    suspend fun byIds(ids: List<Long>): List<Quote>
+
+    @Query("DELETE FROM quotes WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<Long>)
 
     @Query("SELECT COUNT(*) FROM quotes")
     fun observeCount(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM quotes WHERE isActive = 1")
+    fun observeActiveCount(): Flow<Int>
+
+    @Query("UPDATE quotes SET isActive = :active WHERE id IN (:ids)")
+    suspend fun setActive(ids: List<Long>, active: Boolean)
 
     @Query("SELECT DISTINCT category FROM quotes ORDER BY category")
     fun observeCategories(): Flow<List<String>>
@@ -98,8 +120,11 @@ interface QuoteDao {
     @Query("SELECT * FROM quotes ORDER BY RANDOM() LIMIT 1")
     suspend fun random(): Quote?
 
+    @Query("SELECT * FROM quotes WHERE isActive = 1 ORDER BY RANDOM() LIMIT 1")
+    suspend fun randomActive(): Quote?
+
     // Least recently shown first; never-shown quotes are picked at random.
-    @Query("SELECT * FROM quotes WHERE category NOT IN (:disabled) ORDER BY lastShownAt ASC, RANDOM() LIMIT 1")
+    @Query("SELECT * FROM quotes WHERE isActive = 1 AND category NOT IN (:disabled) ORDER BY lastShownAt ASC, RANDOM() LIMIT 1")
     suspend fun next(disabled: List<String>): Quote?
 
     @Query("DELETE FROM quotes WHERE isCustom = 0 AND text IN (:texts)")
@@ -157,9 +182,16 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
-val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // every quote you already have stays active, so reminders keep working exactly as before
+        db.execSQL("ALTER TABLE quotes ADD COLUMN isActive INTEGER NOT NULL DEFAULT 1")
+    }
+}
 
-@Database(entities = [Quote::class, QuoteImage::class], version = 3, exportSchema = false)
+val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+
+@Database(entities = [Quote::class, QuoteImage::class], version = 4, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun quotes(): QuoteDao
     abstract fun images(): ImageDao

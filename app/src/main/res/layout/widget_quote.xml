@@ -4,12 +4,32 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_bg"
-    android:padding="16dp">
+    android:clipToOutline="true">
+
+    <!-- the quote's picture, full-bleed; hidden when there is none -->
+    <ImageView
+        android:id="@+id/w_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop"
+        android:visibility="gone" />
+
+    <!-- darkens the picture so the words stay readable -->
+    <ImageView
+        android:id="@+id/w_scrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_scrim"
+        android:visibility="gone" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="center_vertical"
+        android:layout_margin="16dp"
         android:orientation="vertical"
         android:paddingEnd="36dp">
 
@@ -40,7 +60,7 @@
             android:layout_marginTop="4dp"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="#A9B4D0"
+            android:textColor="#C9D1E6"
             android:textSize="12sp" />
     </LinearLayout>
 
@@ -49,6 +69,7 @@
         android:layout_width="36dp"
         android:layout_height="36dp"
         android:layout_gravity="top|end"
+        android:layout_margin="10dp"
         android:contentDescription="@string/widget_next"
         android:padding="8dp"
         android:src="@drawable/ic_refresh" />

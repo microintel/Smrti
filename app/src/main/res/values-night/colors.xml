@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- the window behind the app is true black in dark mode, so there is no navy flash at launch -->
+    <color name="smrti_bg">#000000</color>
+</resources>

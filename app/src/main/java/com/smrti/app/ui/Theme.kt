@@ -15,26 +15,27 @@ import androidx.compose.ui.unit.sp
 import com.smrti.app.data.Prefs
 
 // Brand palette from the logo: sun yellow #FAB62F and deep navy #041237.
+// Dark mode is true black (saves power on OLED screens). Cards are barely-lifted greys so they read without outlines.
 private val DarkColors = darkColorScheme(
     primary = Color(0xFFFAB62F),            // logo yellow
     onPrimary = Color(0xFF041237),          // logo navy
     secondary = Color(0xFFFFD27A),
     onSecondary = Color(0xFF041237),
-    secondaryContainer = Color(0xFF1B2C63),  // selected nav pill
+    secondaryContainer = Color(0xFF2A2312),  // selected nav pill: a deep warm tint
     onSecondaryContainer = Color(0xFFFAB62F),
-    background = Color(0xFF041237),
-    onBackground = Color(0xFFF6F1E4),
-    surface = Color(0xFF0A1A44),
-    onSurface = Color(0xFFF6F1E4),
-    surfaceVariant = Color(0xFF112457),
-    onSurfaceVariant = Color(0xFFA9B4D0),
-    surfaceContainerLowest = Color(0xFF030D2B),
-    surfaceContainerLow = Color(0xFF081640),
-    surfaceContainer = Color(0xFF0A1A44),
-    surfaceContainerHigh = Color(0xFF112457),
-    surfaceContainerHighest = Color(0xFF182F6B),
-    outline = Color(0xFF243B7A),
-    outlineVariant = Color(0xFF1A2E66),
+    background = Color.Black,
+    onBackground = Color(0xFFF2F0EA),
+    surface = Color(0xFF111113),
+    onSurface = Color(0xFFF2F0EA),
+    surfaceVariant = Color(0xFF1B1B1E),
+    onSurfaceVariant = Color(0xFFA7A7AE),
+    surfaceContainerLowest = Color.Black,
+    surfaceContainerLow = Color(0xFF0B0B0C),
+    surfaceContainer = Color(0xFF111113),
+    surfaceContainerHigh = Color(0xFF1B1B1E),   // floating nav bar
+    surfaceContainerHighest = Color(0xFF242428),
+    outline = Color(0xFF2E2E33),
+    outlineVariant = Color(0xFF222226),
     error = Color(0xFFFF8A80),
     errorContainer = Color(0xFF5A1F2A),
     onErrorContainer = Color(0xFFFFDAD6)

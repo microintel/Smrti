@@ -122,6 +122,18 @@ object ImagePool {
         return bitmap?.let { Pick(source, it) }
     }
 
+    /** A random picture's path/uri for showing in the app. Reads no bitmap and leaves the "series" position alone. */
+    suspend fun randomSource(context: Context): String? {
+        val dao = AppDatabase.get(context).images()
+        val albumIds = Prefs.albumIds(context)
+        val importedCount = dao.count()
+        val total = importedCount + AlbumStore.countImages(context, albumIds)
+        if (total == 0) return null
+        val index = Random.nextInt(total)
+        return if (index < importedCount) dao.at(index)?.path
+        else AlbumStore.imageUriAt(context, albumIds, index - importedCount)?.toString()
+    }
+
     /**
      * Picks one source without reading every image: only the counts and the single chosen row are queried
      * (index 0 until imported = "my images", the rest = album photos).

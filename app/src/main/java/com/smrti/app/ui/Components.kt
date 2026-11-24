@@ -45,6 +45,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/** Height the floating bottom bar covers. Screens run behind the bar and add this much space at their end. */
+val LocalNavInset = androidx.compose.runtime.compositionLocalOf { 0.dp }
+
 @Composable
 fun ScreenTitle(title: String, subtitle: String? = null, modifier: Modifier = Modifier) {
     Column(modifier) {
@@ -72,7 +75,7 @@ fun SectionLabel(text: String) {
     )
 }
 
-/** Flat rounded panel with a hairline edge, used for grouping content. */
+/** Flat rounded panel, no outline: it is told apart from the page by its soft fill alone. */
 @Composable
 fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(20.dp)
@@ -81,7 +84,6 @@ fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> 
             .fillMaxWidth()
             .clip(shape)
             .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outline, shape)
             .padding(20.dp),
         content = content
     )
@@ -97,7 +99,6 @@ fun OptionTile(text: String, selected: Boolean, modifier: Modifier = Modifier, o
             .heightIn(min = 52.dp)
             .clip(shape)
             .background(if (selected) colors.primary else colors.surfaceVariant)
-            .border(1.dp, if (selected) colors.primary else colors.outline, shape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
@@ -204,3 +205,50 @@ fun ClosingMoment(emoji: String, title: String, subtitle: String? = null) {
         }
     }
 }
+
+
+// ---- Quiet controls: soft fills instead of outlines ------------------------------------------------
+
+/** A button with a soft tonal fill and no outline (replaces the outlined button). */
+@Composable
+fun QuietButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(14.dp),
+    content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit
+) = androidx.compose.material3.FilledTonalButton(
+    onClick = onClick, modifier = modifier, enabled = enabled, shape = shape,
+    colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = MaterialTheme.colorScheme.onSurface
+    ),
+    content = content
+)
+
+/** A filter chip that is just a soft pill: filled when chosen, faint when not, never outlined. */
+@Composable
+fun QuietFilterChip(selected: Boolean, onClick: () -> Unit, label: @Composable () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    androidx.compose.material3.FilterChip(
+        selected = selected, onClick = onClick, label = label,
+        border = null,
+        colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+            containerColor = c.surfaceVariant,
+            selectedContainerColor = c.secondaryContainer,
+            selectedLabelColor = c.onSecondaryContainer
+        )
+    )
+}
+
+/** Text-field colours with a soft filled box and no outline (a faint ring only while typing; red when invalid). */
+@Composable
+fun quietFieldColors() = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+    unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+    disabledBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+    focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+    errorBorderColor = MaterialTheme.colorScheme.error,
+    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+    errorContainerColor = MaterialTheme.colorScheme.surfaceVariant
+)

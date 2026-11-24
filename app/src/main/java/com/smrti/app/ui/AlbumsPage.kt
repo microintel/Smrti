@@ -94,7 +94,7 @@ fun AlbumsPage() {
                             Modifier
                                 .aspectRatio(1f)
                                 .clip(shape)
-                                .border(if (on) 3.dp else 1.dp, if (on) colors.primary else colors.outline, shape)
+                                .then(if (on) Modifier.border(3.dp, colors.primary, shape) else Modifier)
                                 .clickable { picked = if (on) picked - album.id else picked + album.id }
                         ) {
                             Thumbnail(album.cover, Modifier.fillMaxSize(), sizePx = 400)

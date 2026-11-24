@@ -99,7 +99,9 @@ object Notifier {
         }
         db.quotes().markShown(quote.id, System.currentTimeMillis())
         Prefs.setLastQuoteId(context, quote.id)
-        try { SmrtiWidget.refresh(context) } catch (_: Throwable) { }
+        // the widget follows the reminders: same quote, same picture, updated right now (not on a later launch)
+        Prefs.setLastWidgetImage(context, pick?.source ?: "")
+        try { SmrtiWidget.refreshNow(context) } catch (_: Throwable) { }
         return true
     }
 

@@ -144,7 +144,7 @@ fun ImportGuidePage() {
             )
 
             Spacer(Modifier.height(20.dp))
-            OutlinedButton(
+            QuietButton(
                 onClick = {
                     clipboard.setText(AnnotatedString(exampleJson))
                     Toast.makeText(ctx, ctx.getString(R.string.example_copied), Toast.LENGTH_SHORT).show()

@@ -173,7 +173,7 @@ fun ReliabilityPage() {
                     style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
                 )
-                OutlinedButton(onClick = {
+                QuietButton(onClick = {
                     if (!tryStart(ctx, Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))) appInfo(ctx)
                 }) { Text(stringResource(R.string.rel_open_battery)) }
             }
@@ -186,8 +186,8 @@ fun ReliabilityPage() {
                     modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { openAutoStart(ctx) }) { Text(stringResource(R.string.rel_open_autostart)) }
-                    OutlinedButton(onClick = { appInfo(ctx) }) { Text(stringResource(R.string.rel_open_appinfo)) }
+                    QuietButton(onClick = { openAutoStart(ctx) }) { Text(stringResource(R.string.rel_open_autostart)) }
+                    QuietButton(onClick = { appInfo(ctx) }) { Text(stringResource(R.string.rel_open_appinfo)) }
                 }
             }
             Spacer(Modifier.height(16.dp))

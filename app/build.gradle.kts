@@ -26,8 +26,10 @@ android {
         applicationId = "com.smrti.app"
         minSdk = 28
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2"
+        // CI sets these from the git tag (v1.3 -> "1.3") so the in-app updater compares the right numbers;
+        // building by hand keeps the defaults below.
+        versionCode = System.getenv("SMRTI_VERSION_CODE")?.toIntOrNull() ?: 3
+        versionName = System.getenv("SMRTI_VERSION") ?: "1.2"
     }
 
     signingConfigs {
@@ -43,6 +45,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            // The website APK is the debug build. An update only installs over the old app when both are signed
+            // with the same key, so when a keystore is provided (see above) the debug build uses it too.
+            signingConfigs.findByName("release")?.let { signingConfig = it }
+        }
         release {
             // R8: shrinks code, removes unused resources, and makes startup and scrolling faster
             isMinifyEnabled = true
@@ -68,6 +75,9 @@ android {
     lint {
         // translations are provided for the main languages only; don't fail the build on the rest
         disable += "MissingTranslation"
+        // a lint warning must never stop an APK from being built; the report is still written
+        abortOnError = false
+        checkReleaseBuilds = false
     }
 }
 

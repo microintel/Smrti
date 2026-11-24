@@ -1,5 +1,7 @@
 package com.smrti.app.ui
 
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.Alignment
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
@@ -76,10 +78,11 @@ fun ReminderPage(reminder: OpenedReminder) {
     var imageFailed by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         delay(120)
-        withTimeoutOrNull(900) { snapshotFlow { imageReady }.first { it } }
         step = 1
         delay(380); step = 2
         delay(380); step = 3
+        // give a slow picture a moment before the buttons arrive
+        withTimeoutOrNull(900) { snapshotFlow { imageReady }.first { it } }
         delay(300); step = 4
     }
     LaunchedEffect(ending) {
@@ -97,34 +100,42 @@ fun ReminderPage(reminder: OpenedReminder) {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
-            if (imagePath != null && !imageFailed) {
-                AsyncImage(
-                    model = remember(imagePath) { reminderImageRequest(ctx, imagePath) },
-                    contentDescription = null,
-                    // show the whole picture, never cropped: full width, height follows the photo
-                    contentScale = ContentScale.FillWidth,
-                    onSuccess = { imageReady = true },
-                    onError = { imageReady = true; imageFailed = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        // reserve room while it loads, so the words don't jump down
-                        .heightIn(min = if (imageReady) 0.dp else 240.dp)
-                        .reveal(step >= 1)
-                        .clip(RoundedCornerShape(28.dp))
-                )
-                Spacer(Modifier.height(24.dp))
-            }
+            // 1) the words, 2) the author, 3) the picture, fitted whole into the room that is left
             Text(
                 reminder.text,
                 fontFamily = FontFamily.Serif, fontSize = 26.sp, lineHeight = 38.sp,
-                modifier = Modifier.reveal(step >= 2)
+                modifier = Modifier.reveal(step >= 1)
             )
             if (reminder.author.isNotBlank()) {
                 Spacer(Modifier.height(16.dp))
                 Text(
                     "— ${reminder.author}", style = MaterialTheme.typography.bodyLarge, color = colors.onSurfaceVariant,
-                    modifier = Modifier.reveal(step >= 3)
+                    modifier = Modifier.reveal(step >= 2)
                 )
+            }
+            if (imagePath != null && !imageFailed) {
+                Spacer(Modifier.height(24.dp))
+                // never cropped and never taller than about half the screen, so quote and picture sit together
+                val maxPictureHeight = (LocalConfiguration.current.screenHeightDp * 0.5f).dp
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        // reserve room while it loads, so nothing jumps
+                        .heightIn(min = if (imageReady) 0.dp else 200.dp)
+                        .reveal(step >= 3),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = remember(imagePath) { reminderImageRequest(ctx, imagePath) },
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        onSuccess = { imageReady = true },
+                        onError = { imageReady = true; imageFailed = true },
+                        modifier = Modifier
+                            .heightIn(max = maxPictureHeight)
+                            .clip(RoundedCornerShape(24.dp))
+                    )
+                }
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -133,7 +144,7 @@ fun ReminderPage(reminder: OpenedReminder) {
             Modifier.fillMaxWidth().padding(horizontal = 20.dp).reveal(step >= 4),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            OutlinedButton(
+            QuietButton(
                 onClick = {
                     scope.launch {
                         val dao = AppDatabase.get(ctx).quotes()

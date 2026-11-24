@@ -249,10 +249,13 @@ private fun SmrtiRoot() {
                 modifier = Modifier.fillMaxSize()
             ) { page ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                  // the screen runs behind the floating bar; each screen adds this much space at its end
+                  androidx.compose.runtime.CompositionLocalProvider(
+                    com.smrti.app.ui.LocalNavInset provides (if (imeOpen) 0.dp else NavHeight + NavMargin * 2)
+                  ) {
                     // on tablets and in landscape the content keeps a readable width instead of stretching edge to edge
                     Box(
                         Modifier.widthIn(max = com.smrti.app.ui.ContentMaxWidth).fillMaxSize()
-                            .padding(bottom = if (imeOpen) 0.dp else NavHeight + NavMargin * 2)
                     ) {
                         when (page) {
                             0 -> HomeScreen()
@@ -261,6 +264,7 @@ private fun SmrtiRoot() {
                             else -> SettingsScreen()
                         }
                     }
+                  }
                 }
             }
 
@@ -290,9 +294,10 @@ private fun FloatingNav(selected: Int, onSelect: (Int) -> Unit) {
     Row(
         Modifier
             .padding(bottom = NavMargin)
+            // lifted off the screen: a soft shadow, and a slightly see-through body so content shows behind it
+            .shadow(14.dp, shape, ambientColor = androidx.compose.ui.graphics.Color.Black, spotColor = androidx.compose.ui.graphics.Color.Black)
             .clip(shape)
-            .background(colors.surfaceContainerHigh)
-            .border(1.dp, colors.outline, shape)
+            .background(colors.surfaceContainerHigh.copy(alpha = 0.94f))
             .heightIn(min = NavHeight)
             .padding(horizontal = 8.dp)
             .animateContentSize(),
