@@ -250,7 +250,7 @@
     <string name="widget_status_off">The widget isn\'t on your home screen yet.</string>
     <string name="widget_add">Add to home screen</string>
     <string name="widget_another">Show another quote</string>
-    <string name="widget_pin_unsupported">This phone can\'t add it from here. Please use the steps above.</string>
+    <string name="widget_pin_unsupported">This phone can\'t add it from here. Tap the ⓘ icon for the steps.</string>
     <string name="widget_show_picture">Picture on widget</string>
     <string name="widget_show_picture_sub">Show the quote\'s picture behind the words</string>
     <string name="delete_quote_title">Delete this quote?</string>
@@ -304,4 +304,11 @@
     <string name="guard_popup_off">Allow \"Display over other apps\" so a pop-up can appear over the app when your time is up. Without it you only get the notification.</string>
     <string name="guard_popup_keep">Keep going</string>
     <string name="guard_popup_used">Today you have used %1$s for %2$s.</string>
+    <string name="show_inactive_quotes">Show inactive quotes</string>
+    <string name="show_active_quotes">Show active quotes</string>
+    <string name="update_versions">Installed %1$s · Latest %2$s</string>
+    <string name="update_suggest_major">Big update. Recommended: update now. Your quotes and settings are kept.</string>
+    <string name="update_suggest_minor">New features and fixes. Update when you have a minute. Your quotes and settings are kept.</string>
+    <string name="update_suggest_patch">Small fixes. Update whenever it suits you.</string>
+    <string name="update_suggest_newer">This build is newer than the published one. No update needed.</string>
 </resources>

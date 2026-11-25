@@ -37,6 +37,11 @@ import androidx.compose.runtime.key
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -141,30 +146,25 @@ fun SettingsScreen() {
         }
         }
 
+        var widgetInfo by remember { mutableStateOf(false) }
         SectionLabel(stringResource(R.string.widget_section))
         Panel {
-            Text(stringResource(R.string.widget_how_title), style = MaterialTheme.typography.bodyLarge)
-            Text(
-                stringResource(R.string.widget_how_body),
-                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-            Spacer(Modifier.height(14.dp))
-            listOf(R.string.widget_step_1, R.string.widget_step_2, R.string.widget_step_3).forEachIndexed { i, step ->
-                Row(Modifier.padding(vertical = 4.dp)) {
-                    Text(
-                        "${i + 1}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.width(24.dp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(if (widgetPlaced) R.string.widget_status_on else R.string.widget_status_off),
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                // (i): how the widget works, in a popup
+                IconButton(onClick = { widgetInfo = true }) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = stringResource(R.string.widget_how_title),
+                        tint = MaterialTheme.colorScheme.primary
                     )
-                    Text(stringResource(step), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                 }
             }
-            Spacer(Modifier.height(10.dp))
-            Text(
-                stringResource(if (widgetPlaced) R.string.widget_status_on else R.string.widget_status_off),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!widgetPlaced) QuietButton(onClick = {
                     // the phone asks you to confirm; if it can't, the steps above still work
@@ -176,6 +176,26 @@ fun SettingsScreen() {
                 }
             }
         }
+        if (widgetInfo) AlertDialog(
+            onDismissRequest = { widgetInfo = false },
+            title = { Text(stringResource(R.string.widget_how_title)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.widget_how_body), style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.height(14.dp))
+                    listOf(R.string.widget_step_1, R.string.widget_step_2, R.string.widget_step_3).forEachIndexed { i, step ->
+                        Row(Modifier.padding(vertical = 4.dp)) {
+                            Text(
+                                "${i + 1}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.width(24.dp)
+                            )
+                            Text(stringResource(step), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { widgetInfo = false }) { Text(stringResource(R.string.done)) } }
+        )
         Panel(Modifier.padding(top = 12.dp)) {
             SettingRow(stringResource(R.string.widget_show_picture), stringResource(R.string.widget_show_picture_sub)) {
                 Switch(checked = widgetImages, onCheckedChange = {

@@ -250,7 +250,7 @@
     <string name="widget_status_off">विजेट अभी आपकी होम स्क्रीन पर नहीं है।</string>
     <string name="widget_add">होम स्क्रीन पर जोड़ें</string>
     <string name="widget_another">दूसरा विचार दिखाएँ</string>
-    <string name="widget_pin_unsupported">यह फ़ोन यहाँ से नहीं जोड़ सकता। कृपया ऊपर के चरणों का उपयोग करें।</string>
+    <string name="widget_pin_unsupported">यह फ़ोन यहाँ से नहीं जोड़ सकता। चरणों के लिए ⓘ आइकन पर टैप करें।</string>
     <string name="widget_show_picture">विजेट पर चित्र</string>
     <string name="widget_show_picture_sub">शब्दों के पीछे विचार का चित्र दिखाएँ</string>
     <string name="delete_quote_title">यह विचार हटाएँ?</string>
@@ -304,4 +304,11 @@
     <string name="guard_popup_off">\"अन्य ऐप्स के ऊपर दिखाएँ\" की अनुमति दें ताकि समय पूरा होने पर ऐप के ऊपर पॉप-अप आ सके। इसके बिना केवल नोटिफिकेशन मिलेगा।</string>
     <string name="guard_popup_keep">जारी रखें</string>
     <string name="guard_popup_used">आज आपने %2$s के लिए %1$s इस्तेमाल किया है।</string>
+    <string name="show_inactive_quotes">निष्क्रिय उद्धरण दिखाएँ</string>
+    <string name="show_active_quotes">सक्रिय उद्धरण दिखाएँ</string>
+    <string name="update_versions">इंस्टॉल: %1$s · नवीनतम: %2$s</string>
+    <string name="update_suggest_major">बड़ा अपडेट। सुझाव: अभी अपडेट करें। आपके उद्धरण और सेटिंग्स सुरक्षित रहेंगी।</string>
+    <string name="update_suggest_minor">नई सुविधाएँ और सुधार। समय मिलते ही अपडेट करें। आपके उद्धरण और सेटिंग्स सुरक्षित रहेंगी।</string>
+    <string name="update_suggest_patch">छोटे सुधार। जब सुविधा हो तब अपडेट करें।</string>
+    <string name="update_suggest_newer">यह बिल्ड प्रकाशित संस्करण से नया है। अपडेट की ज़रूरत नहीं।</string>
 </resources>

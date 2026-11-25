@@ -34,6 +34,9 @@ data class Quote(
     @ColumnInfo(defaultValue = "1") val isActive: Boolean = true
 )
 
+/** Result of [QuoteDao.observeCounts]. */
+data class QuoteCounts(val total: Int, val active: Int)
+
 /** [path] is either a content:// uri of the original photo (v1.2+) or a file path of a copy made by older versions. */
 @Entity(tableName = "images")
 data class QuoteImage(
@@ -107,6 +110,18 @@ interface QuoteDao {
 
     @Query("SELECT COUNT(*) FROM quotes")
     fun observeCount(): Flow<Int>
+
+    // Total and active in ONE query, so the Quotes tab listens to one flow instead of two
+    @Query("SELECT COUNT(*) AS total, COALESCE(SUM(isActive), 0) AS active FROM quotes")
+    fun observeCounts(): Flow<QuoteCounts>
+
+    // How many quotes the current search / filter matches (what "Select all" will pick)
+    @Query(
+        "SELECT COUNT(*) FROM quotes WHERE (:category = '' OR category = :category) " +
+            "AND (:favOnly = 0 OR isFavorite = 1) AND isActive = :active " +
+            "AND (:q = '' OR text LIKE '%' || :q || '%' OR author LIKE '%' || :q || '%')"
+    )
+    suspend fun countMatching(q: String, category: String, favOnly: Int, active: Int): Int
 
     @Query("SELECT COUNT(*) FROM quotes WHERE isActive = 1")
     fun observeActiveCount(): Flow<Int>

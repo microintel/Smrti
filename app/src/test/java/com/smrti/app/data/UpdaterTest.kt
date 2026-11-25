@@ -22,4 +22,13 @@ class UpdaterTest {
         assertEquals(listOf("One", "Two"), i.notes)
         assertEquals("ab", i.sha256)
     }
+
+    @Test
+    fun gapTellsWhatKindOfUpdateItIs() {
+        assertEquals(VersionGap.Major, versionGap("2.0", "1.9"))
+        assertEquals(VersionGap.Minor, versionGap("1.3", "1.2"))
+        assertEquals(VersionGap.Patch, versionGap("1.2.1", "1.2"))
+        assertEquals(VersionGap.Same, versionGap("1.2", "1.2"))
+        assertEquals(VersionGap.InstalledNewer, versionGap("1.2", "1.3"))
+    }
 }

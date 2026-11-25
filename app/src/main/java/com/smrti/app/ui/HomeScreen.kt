@@ -139,7 +139,6 @@ fun HomeScreen() {
     val quoteCount by remember { db.quotes().observeCount() }.collectAsState(initial = 0)
     val images by remember { db.images().observeAll() }.collectAsState(initial = emptyList())
 
-    var preview by remember { mutableStateOf<Quote?>(null) }
     var enabled by remember { mutableStateOf(Prefs.isEnabled(ctx)) }
     var interval by remember { mutableIntStateOf(Prefs.intervalMinutes(ctx)) }
     // bumped when the schedule changes; only the small status line below listens to it (the page itself never ticks)
@@ -147,17 +146,6 @@ fun HomeScreen() {
     var allowed by remember { mutableStateOf(Notifier.canNotify(ctx)) }
     var showCustom by remember { mutableStateOf(false) }
 
-    LaunchedEffect(quoteCount > 0) {
-        if (preview == null) preview = db.quotes().random()
-    }
-    // the quote's own picture, or a random one from the library (same rule as the notifications)
-    var previewImage by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(preview?.id, images.isEmpty()) {
-        val q = preview
-        previewImage = if (q == null || !Prefs.useImages(ctx)) null else try {
-            q.imagePath ?: ImagePool.randomSource(ctx)
-        } catch (_: Throwable) { null }
-    }
     LifecycleResumeEffect(Unit) {
         allowed = Notifier.canNotify(ctx)
         statusTick++
@@ -193,84 +181,6 @@ fun HomeScreen() {
         UpdateAutoCheck()
         Spacer(Modifier.height(24.dp))
         UpdateBanner()
-
-        // Quote
-        Panel {
-            Crossfade(targetState = preview, label = "quote") { q ->
-                if (q == null) {
-                    EmptyState(
-                        emoji = "✨",
-                        title = stringResource(R.string.nothing_to_remember_yet),
-                        message = stringResource(R.string.add_a_quote_and_it_will),
-                        actionLabel = stringResource(R.string.add_a_quote),
-                        verticalPadding = 8.dp
-                    ) { Nav.open(Page.AddQuote) }
-                } else {
-                    val picture = previewImage
-                    if (picture != null) {
-                        // the quote written over its picture
-                        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))) {
-                            AsyncImage(
-                                model = remember(picture) {
-                                    ImageRequest.Builder(ctx).data(imageModel(picture)).size(Size(1080, 1080)).build()
-                                },
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                onError = { previewImage = null },
-                                modifier = Modifier.matchParentSize()
-                            )
-                            // darkens the picture so the words stay readable
-                            Box(
-                                Modifier.matchParentSize().background(
-                                    Brush.verticalGradient(listOf(Color(0x59000000), Color(0xD9000000)))
-                                )
-                            )
-                            Column(
-                                Modifier.fillMaxWidth().heightIn(min = 280.dp).padding(20.dp),
-                                verticalArrangement = Arrangement.Bottom
-                            ) {
-                                Text(q.category, style = MaterialTheme.typography.labelLarge, color = Color(0xFFFAB62F))
-                                Spacer(Modifier.height(10.dp))
-                                Text(q.text, fontFamily = FontFamily.Serif, fontSize = 23.sp, lineHeight = 33.sp, color = Color(0xFFF6F1E4))
-                                if (q.author.isNotBlank()) {
-                                    Spacer(Modifier.height(10.dp))
-                                    Text("— ${q.author}", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD5DAE8))
-                                }
-                            }
-                        }
-                    } else Column {
-                        Text(
-                            q.category,
-                            style = MaterialTheme.typography.labelLarge, color = colors.primary
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Text(q.text, fontFamily = FontFamily.Serif, fontSize = 23.sp, lineHeight = 33.sp)
-                        if (q.author.isNotBlank()) {
-                            Spacer(Modifier.height(12.dp))
-                            Text("— ${q.author}", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-                        }
-                    }
-                }
-            }
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                preview?.let { q ->
-                    var fav by remember(q.id) { mutableStateOf(q.isFavorite) }
-                    IconButton(onClick = {
-                        fav = !fav
-                        scope.launch { db.quotes().setFavorite(q.id, fav) }
-                    }) {
-                        Icon(
-                            painterResource(if (fav) R.drawable.ic_star else R.drawable.ic_star_outline),
-                            contentDescription = stringResource(if (fav) R.string.remove_favorite else R.string.add_favorite),
-                            tint = if (fav) colors.primary else colors.onSurfaceVariant
-                        )
-                    }
-                }
-                TextButton(onClick = { scope.launch { preview = db.quotes().random() } }) {
-                    Text(stringResource(R.string.show_another))
-                }
-            }
-        }
 
         if (!allowed) {
             Spacer(Modifier.height(16.dp))

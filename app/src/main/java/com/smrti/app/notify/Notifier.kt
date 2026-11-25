@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import com.smrti.app.data.PictureFit
 import android.os.Build
 import android.view.View
 import android.widget.RemoteViews
@@ -123,7 +124,7 @@ object Notifier {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         // Fallback icon (used if the banner is off): square thumbnail of the picture, else the Smrti logo.
-        val largeIcon = picture?.let { squareThumbnail(it, 256) }
+        val largeIcon = picture?.let { PictureFit.fit(it, 256, 256) }
             ?: BitmapFactory.decodeResource(context.resources, R.drawable.smrti_logo)
 
         // Buttons under the notification: save as favourite
@@ -157,7 +158,7 @@ object Notifier {
             // Android 11 and older: custom collapsed view, wide picture banner with the quote on top.
             // (Android 12+ restricts custom collapsed views to a thin strip, so it uses the native mode below.)
             val collapsed = RemoteViews(context.packageName, R.layout.notification_collapsed).apply {
-                setImageViewBitmap(R.id.n_image, banner(picture, 800, 150))
+                setImageViewBitmap(R.id.n_image, PictureFit.fit(picture, 800, 150))
                 setTextViewText(R.id.n_text, quote.text)
                 setTextViewText(R.id.n_author, if (quote.author.isNotBlank()) "— ${quote.author}" else "")
                 setViewVisibility(R.id.n_author, if (quote.author.isNotBlank()) View.VISIBLE else View.GONE)
@@ -168,7 +169,7 @@ object Notifier {
         if (picture != null) {
             builder.setStyle(
                 NotificationCompat.BigPictureStyle()
-                    .bigPicture(picture)
+                    .bigPicture(PictureFit.fit(picture, 1024, 512))
                     .bigLargeIcon(null as Bitmap?)
                     .also { if (nativeCollapsedPicture && Prefs.largeImage(context)) it.showBigPictureWhenCollapsed(true) }
                     .setBigContentTitle(title)

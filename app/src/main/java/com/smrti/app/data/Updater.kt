@@ -20,6 +20,12 @@ import java.security.MessageDigest
 /** What the website's version.json says about the newest published build. */
 data class UpdateInfo(val version: String, val date: String, val sha256: String, val notes: List<String>)
 
+/** How far the published version is from the one installed on this phone. */
+enum class VersionGap { Major, Minor, Patch, Same, InstalledNewer }
+
+/** The installed version next to the published one, and how they compare (used to give a suggestion). */
+data class VersionCheck(val installed: String, val published: String, val gap: VersionGap)
+
 /**
  * In-app updates. The GitHub workflow publishes docs/downloads/version.json and Smrti-latest.apk on the
  * main branch; the app reads those two files straight from GitHub, so publishing a new tag is all it takes.
@@ -42,6 +48,10 @@ object Updater {
     var state by mutableStateOf<State>(State.Idle)
         private set
 
+    /** Result of the last successful check: installed vs published version. */
+    var lastCheck by mutableStateOf<VersionCheck?>(null)
+        private set
+
     /** Whether the person tapped "Later" for this version (until a newer one shows up). */
     var dismissedVersion by mutableStateOf<String?>(null)
         private set
@@ -58,7 +68,9 @@ object Updater {
         state = try {
             val info = withContext(Dispatchers.IO) { fetchInfo() }
             sp.edit().putLong("update_checked_at", now).apply()
-            if (isNewer(info.version, currentVersion(ctx))) State.Available(info) else State.UpToDate
+            val installed = currentVersion(ctx)
+            lastCheck = VersionCheck(installed, info.version, versionGap(info.version, installed))
+            if (isNewer(info.version, installed)) State.Available(info) else State.UpToDate
         } catch (_: Throwable) {
             State.Failed
         }
@@ -87,6 +99,7 @@ object Updater {
         val s = state
         if (s is State.Ready && !isNewer(s.info.version, currentVersion(ctx))) {
             apkFile(ctx).delete()
+            lastCheck = VersionCheck(currentVersion(ctx), s.info.version, VersionGap.Same)
             state = State.UpToDate
         }
     }
@@ -178,13 +191,27 @@ internal fun parseInfo(json: String): UpdateInfo {
     )
 }
 
-/** True when [remote] is a higher dotted version than [local] ("1.10" > "1.9", "1.2.1" > "1.2"). */
-internal fun isNewer(remote: String, local: String): Boolean {
+/** Positive when [remote] is a higher dotted version than [local], 0 when equal, negative when lower. */
+internal fun compareVersions(remote: String, local: String): Int {
     fun parts(v: String) = v.trim().removePrefix("v").split('.', '-').map { it.takeWhile(Char::isDigit).toIntOrNull() ?: 0 }
     val r = parts(remote); val l = parts(local)
     for (i in 0 until maxOf(r.size, l.size)) {
         val a = r.getOrElse(i) { 0 }; val b = l.getOrElse(i) { 0 }
-        if (a != b) return a > b
+        if (a != b) return a.compareTo(b)
     }
-    return false
+    return 0
+}
+
+/** True when [remote] is a higher dotted version than [local] ("1.10" > "1.9", "1.2.1" > "1.2"). */
+internal fun isNewer(remote: String, local: String): Boolean = compareVersions(remote, local) > 0
+
+/** Compares the published version with the installed one: which part changed, or whether this build is ahead. */
+internal fun versionGap(remote: String, local: String): VersionGap {
+    val c = compareVersions(remote, local)
+    if (c == 0) return VersionGap.Same
+    if (c < 0) return VersionGap.InstalledNewer
+    fun parts(v: String) = v.trim().removePrefix("v").split('.', '-').map { it.takeWhile(Char::isDigit).toIntOrNull() ?: 0 }
+    val r = parts(remote); val l = parts(local)
+    val i = (0 until maxOf(r.size, l.size)).first { r.getOrElse(it) { 0 } != l.getOrElse(it) { 0 } }
+    return when (i) { 0 -> VersionGap.Major; 1 -> VersionGap.Minor; else -> VersionGap.Patch }
 }

@@ -245,7 +245,8 @@ private fun SmrtiRoot() {
             // swipe left / right to change tabs
             HorizontalPager(
                 state = pagerState,
-                beyondViewportPageCount = 0,
+                // the next tab is prepared in advance, so it is already there when you switch
+                beyondViewportPageCount = 1,
                 modifier = Modifier.fillMaxSize()
             ) { page ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -276,7 +277,14 @@ private fun SmrtiRoot() {
             ) {
                 FloatingNav(
                     selected = pagerState.currentPage,
-                    onSelect = { scope.launch { pagerState.animateScrollToPage(it) } }
+                    onSelect = { target ->
+                        scope.launch {
+                            // tabs in between are skipped (they used to be built and drawn while sliding past)
+                            val from = pagerState.currentPage
+                            if (kotlin.math.abs(target - from) > 1) pagerState.scrollToPage(if (target > from) target - 1 else target + 1)
+                            pagerState.animateScrollToPage(target)
+                        }
+                    }
                 )
             }
 

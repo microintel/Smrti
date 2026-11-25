@@ -3,6 +3,13 @@
 Add a new section at the top for every update, then copy it into the GitHub Release notes.
 
 ## Next
+- Quotes menu: icons for Select, Show inactive/active and Import.
+- Quotes with a chosen picture show it in the list and, whole, when the quote is tapped (before editing).
+- Updates: the app compares the installed version with the one published online and suggests what to do (big, small or no update needed).
+- Quotes: search is behind an icon (with the filters), Active/Inactive moved into the menu, selection is faster and no longer shifts the text.
+- Home no longer shows a quote card; the widget "how it works" steps are now behind an (i) icon in Settings.
+- Pictures are never cropped any more: tall, wide, small or big photos are shown whole in reminders, the Home card and the widget. Switching bottom tabs is smoother.
+- Quotes tab rebuilt for thousands of quotes: lighter rows, tap a quote for big action buttons, Select all no longer builds a huge list, bulk move/delete run as one database transaction, select actions at the bottom.
 - Scroll Guard now shows today's time in X, Instagram and YouTube and how many warnings were sent (from 0 each day), and shows a pop-up over the app when time is up (needs "Display over other apps").
 - Scroll Guard (Settings): a countdown starts when X, Instagram or YouTube opens and resets when you leave. Set the limit in hours and minutes; a heads-up and a time-is-up notification (with your own message and a Close button) follow. Needs Usage access, which only tells which app is open.
 - In-app updates: the app checks GitHub (docs/downloads/version.json) when opened and shows an "Update" card on Home; Settings has a "Check" button. Tap Update to download, verify (SHA-256) and install.

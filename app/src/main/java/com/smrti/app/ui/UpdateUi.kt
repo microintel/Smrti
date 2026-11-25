@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.smrti.app.R
 import com.smrti.app.data.UpdateInfo
+import com.smrti.app.data.VersionCheck
+import com.smrti.app.data.VersionGap
 import com.smrti.app.data.Updater
 import kotlinx.coroutines.launch
 
@@ -33,6 +35,16 @@ fun UpdateAutoCheck() {
         Updater.onResume(ctx)
         onPauseOrDispose { }
     }
+}
+
+/** What to do about the update, based on how far the published version is from the installed one. */
+@Composable
+private fun suggestion(check: VersionCheck?): String? = when (check?.gap) {
+    VersionGap.Major -> stringResource(R.string.update_suggest_major)
+    VersionGap.Minor -> stringResource(R.string.update_suggest_minor)
+    VersionGap.Patch -> stringResource(R.string.update_suggest_patch)
+    VersionGap.InstalledNewer -> stringResource(R.string.update_suggest_newer)
+    else -> null
 }
 
 @Composable
@@ -54,6 +66,20 @@ fun UpdateBanner() {
 
     Panel(Modifier.padding(bottom = 16.dp)) {
         Text(stringResource(R.string.update_available_title, info.version), style = MaterialTheme.typography.titleMedium)
+        Updater.lastCheck?.let { c ->
+            Text(
+                stringResource(R.string.update_versions, c.installed, c.published),
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+            suggestion(c)?.let {
+                Text(
+                    it, style = MaterialTheme.typography.bodyMedium,
+                    color = if (c.gap == VersionGap.Major) colors.primary else colors.onSurface,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+        }
         if (info.notes.isNotEmpty()) {
             Text(
                 notesText(info), style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant,
@@ -93,15 +119,23 @@ fun UpdateSettingsRow() {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val s = Updater.state
-    val subtitle = when (s) {
+    val check = Updater.lastCheck
+    val status = when (s) {
         is Updater.State.Checking -> stringResource(R.string.update_checking)
-        is Updater.State.UpToDate -> stringResource(R.string.update_up_to_date)
+        is Updater.State.UpToDate ->
+            if (check?.gap == VersionGap.InstalledNewer) stringResource(R.string.update_suggest_newer)
+            else stringResource(R.string.update_up_to_date)
         is Updater.State.Available -> stringResource(R.string.update_available_title, s.info.version)
         is Updater.State.Downloading -> stringResource(R.string.update_downloading, s.percent)
         is Updater.State.Ready -> stringResource(R.string.update_ready)
         is Updater.State.Failed -> stringResource(R.string.update_failed)
         else -> stringResource(R.string.update_row_sub)
     }
+    // installed vs published, and what to do about it (only once a check has finished)
+    val versions = if (check != null && (s is Updater.State.Available || s is Updater.State.UpToDate))
+        stringResource(R.string.update_versions, check.installed, check.published) else null
+    val advice = if (s is Updater.State.Available) suggestion(check) else null
+    val subtitle = listOfNotNull(status, versions, advice).joinToString("\n")
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(stringResource(R.string.update_row_title), style = MaterialTheme.typography.bodyLarge)

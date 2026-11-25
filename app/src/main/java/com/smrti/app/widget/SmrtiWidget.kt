@@ -20,6 +20,7 @@ import com.smrti.app.R
 import com.smrti.app.data.AppDatabase
 import com.smrti.app.data.AppScope
 import com.smrti.app.data.ImagePool
+import com.smrti.app.data.PictureFit
 import com.smrti.app.data.Prefs
 import com.smrti.app.data.Quote
 import kotlinx.coroutines.launch
@@ -128,7 +129,7 @@ class SmrtiWidget : AppWidgetProvider() {
             return w to h
         }
 
-        /** Cuts the picture to the widget's shape and keeps it small enough for the system to carry. */
+        /** Fits the whole picture into the widget's shape and keeps it small enough for the system to carry. */
         private fun cover(context: Context, src: Bitmap, wDp: Int, hDp: Int): Bitmap {
             val density = context.resources.displayMetrics.density
             var w = wDp * density
@@ -139,15 +140,6 @@ class SmrtiWidget : AppWidgetProvider() {
             val ow = w.toInt().coerceAtLeast(2)
             val oh = h.toInt().coerceAtLeast(2)
 
-            // centre-crop the source to the widget's shape
-            val target = ow.toFloat() / oh
-            val srcRatio = src.width.toFloat() / src.height
-            val cropW: Int; val cropH: Int
-            if (srcRatio > target) { cropH = src.height; cropW = (src.height * target).toInt() }
-            else { cropW = src.width; cropH = (src.width / target).toInt() }
-            val left = (src.width - cropW) / 2
-            val top = (src.height - cropH) / 2
-
             val out = Bitmap.createBitmap(ow, oh, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(out)
             // before Android 12 the layout can't round the corners itself, so round the picture
@@ -155,10 +147,8 @@ class SmrtiWidget : AppWidgetProvider() {
                 val r = 24f * density * ow / (wDp * density).coerceAtLeast(1f)
                 canvas.clipPath(Path().apply { addRoundRect(RectF(0f, 0f, ow.toFloat(), oh.toFloat()), r, r, Path.Direction.CW) })
             }
-            canvas.drawBitmap(
-                src, android.graphics.Rect(left, top, left + cropW, top + cropH),
-                RectF(0f, 0f, ow.toFloat(), oh.toFloat()), Paint(Paint.FILTER_BITMAP_FLAG)
-            )
+            // the whole picture, never cropped: fitted inside, with a soft backdrop for the spare space
+            PictureFit.draw(canvas, src, ow, oh)
             return out
         }
 
